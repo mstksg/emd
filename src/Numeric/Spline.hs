@@ -14,10 +14,8 @@ module Numeric.Spline (
   , sampleSpline
   ) where
 
-import           Control.Applicative
 import           Control.Applicative.Backwards
 import           Control.Monad.ST
-import           Data.Coerce
 import           Data.Finite
 import           Data.Foldable
 import           Data.Proxy

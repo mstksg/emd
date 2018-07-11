@@ -1,23 +1,18 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase   #-}
-{-# LANGUAGE LambdaCase   #-}
 
 module Numeric.EMD (
     sift
   , SiftCondition(..)
   ) where
 
-import           Control.Monad.Trans.State
-import           Control.Monad.Trans.Writer
 import           Data.Bifunctor
 import           Data.Finite
-import           Data.Monoid
-import           Data.Ord
 import           GHC.TypeNats
 import           Numeric.Spline
-import qualified Data.Map                   as M
-import qualified Data.Vector.Generic        as VG
-import qualified Data.Vector.Generic.Sized  as SVG
+import qualified Data.Map                      as M
+import qualified Data.Vector.Generic           as VG
+import qualified Data.Vector.Generic.Sized     as SVG
 
 data SiftCondition a = SCStdDev a
 
