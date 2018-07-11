@@ -35,7 +35,8 @@ ghc-options:
 
 library:
   source-dirs: src
-
+  other-modules:
+  - Numeric.Spline
 # tests:
 #   emd-test:
 #     main:                Spec.hs

@@ -9,7 +9,7 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
 module Numeric.Spline (
-    Spline(..)
+    Spline
   , makeSpline
   , sampleSpline
   ) where
