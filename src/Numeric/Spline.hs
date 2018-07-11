@@ -54,31 +54,22 @@ sampleSpline Spline{..} x = case x `M.lookupLE` splineTail of
       (x0, sc) -> runSplineCoef x0 sc x
     Just (x0, sc) -> runSplineCoef x0 sc x
 
--- https://en.wikipedia.org/wiki/Spline_(mathematics)#Algorithm_for_computing_natural_cubic_splines
+-- | Computes a 'Spline' based on x-y coordinates, based on
+-- <https://en.wikipedia.org/wiki/Spline_(mathematics)#Algorithm_for_computing_natural_cubic_splines>
+--
+-- Returns 'Nothing' if given an empty map.
 makeSpline
     :: forall a. (Ord a, Fractional a)
     => M.Map a a
-    -> Spline a
+    -> Maybe (Spline a)
 makeSpline ps = SV.withSizedList (M.toList ps) $ \(xsys :: SV.Vector n (a,a)) ->
-    case (,) <$> (Proxy @1 `isLE` Proxy @n) <*> (Proxy @2 `isLE` Proxy @n) of
-      Nothing           -> errorWithoutStackTrace "Too small"
-      Just (Refl, Refl) -> runST $ do
-        let xs :: SV.Vector n a
-            ys :: SV.Vector n a
-            (xs, ys) = SV.unzip xsys
-            hs :: SV.Vector (n - 1) a
-            hs = SV.generate $ \i -> xs `SV.index` shift i
-                                   - xs `SV.index` weaken i
-            as :: SV.Vector (n - 2) a
-            as = SV.generate $ \i0 ->
-              let i1 = shift i0
-                  i2 = shift i1
-                  y0 = ys `SV.index` weakenN i0
-                  y1 = ys `SV.index` weaken  i1
-                  y2 = ys `SV.index` i2
-                  h0 = hs `SV.index` weaken  i0
-                  h1 = hs `SV.index` i1
-              in  3 * ((y2 - y1) / h1 - (y1 - y0) / h0)
+    go xsys <$> Proxy @2 `isLE` Proxy @n
+  where
+    go  :: forall n. KnownNat n
+        => SV.Vector n (a, a)
+        -> ((2 <=? n) :~: 'True)
+        -> Spline a
+    go xsys Refl = runST $ do
         βs <- SMV.unsafeNew @(n - 1)
         γs <- SMV.unsafeNew @n
         δs <- SMV.unsafeNew @(n - 1)
@@ -133,4 +124,20 @@ makeSpline ps = SV.withSizedList (M.toList ps) $ \(xsys :: SV.Vector n (a,a)) ->
         pure $ Spline (SV.head @(n - 2) res)
                       (M.fromAscList . SV.toList . SV.tail @(n - 2) $ res)
 
-
+      where
+        xs :: SV.Vector n a
+        ys :: SV.Vector n a
+        (xs, ys) = SV.unzip xsys
+        hs :: SV.Vector (n - 1) a
+        hs = SV.generate $ \i -> xs `SV.index` shift i
+                               - xs `SV.index` weaken i
+        as :: SV.Vector (n - 2) a
+        as = SV.generate $ \i0 ->
+          let i1 = shift i0
+              i2 = shift i1
+              y0 = ys `SV.index` weakenN i0
+              y1 = ys `SV.index` weaken  i1
+              y2 = ys `SV.index` i2
+              h0 = hs `SV.index` weaken  i0
+              h1 = hs `SV.index` i1
+          in  3 * ((y2 - y1) / h1 - (y1 - y0) / h0)
