@@ -1,0 +1,48 @@
+name:                emd
+version:             0.1.0.0
+github:              "mstksg/emd"
+license:             BSD3
+author:              "Justin Le"
+maintainer:          "justin@jle.im"
+copyright:           "(c) Justin Le 2018"
+
+extra-source-files:
+- README.md
+- CHANGELOG.md
+
+# Metadata used when publishing your package
+synopsis:            Hilbert-Huang Transform/Empirical Mode Decomposition
+category:            Math
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/mstksg/emd#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- vector-sized
+- vector
+- finite-typelits
+- transformers
+- containers
+- ghc-typelits-natnormalise
+- ghc-typelits-knownnat
+- typelits-witnesses
+
+ghc-options:
+- -Wall
+
+library:
+  source-dirs: src
+
+# tests:
+#   emd-test:
+#     main:                Spec.hs
+#     source-dirs:         test
+#     ghc-options:
+#     - -threaded
+#     - -rtsopts
+#     - -with-rtsopts=-N
+#     dependencies:
+#     - emd
