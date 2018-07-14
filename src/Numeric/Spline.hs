@@ -3,8 +3,10 @@
 {-# LANGUAGE GADTs                                    #-}
 {-# LANGUAGE RecordWildCards                          #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}
+{-# LANGUAGE TupleSections                            #-}
 {-# LANGUAGE TypeApplications                         #-}
 {-# LANGUAGE TypeOperators                            #-}
+{-# LANGUAGE ViewPatterns                             #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
@@ -16,6 +18,7 @@ module Numeric.Spline (
 
 import           Control.Applicative.Backwards
 import           Control.Monad.ST
+import           Data.Bifunctor
 import           Data.Finite
 import           Data.Foldable
 import           Data.Proxy
@@ -23,8 +26,11 @@ import           Data.Type.Equality
 import           GHC.TypeLits.Compare
 import           GHC.TypeNats
 import qualified Data.Map                      as M
+import qualified Data.Sparse.SpMatrix          as Sparse
+import qualified Data.Sparse.SpVector          as Sparse
 import qualified Data.Vector.Mutable.Sized     as SMV
 import qualified Data.Vector.Sized             as SV
+import qualified Numeric.LinearAlgebra.Sparse  as Sparse
 
 data SplineCoef a = SC { scAlpha :: !a
                        , scBeta  :: !a
@@ -141,3 +147,96 @@ makeSpline ps = SV.withSizedList (M.toList ps) $ \(xsys :: SV.Vector n (a,a)) ->
               h0 = hs `SV.index` weaken  i0
               h1 = hs `SV.index` i1
           in  3 * ((y2 - y1) / h1 - (y1 - y0) / h0)
+
+makeSpline'
+    :: forall a. (Ord a, Fractional a)
+    => M.Map a a
+    -> Maybe (Spline a)
+makeSpline' ps = do
+    (xy0, ps') <- M.minViewWithKey ps
+    SV.withSizedList (M.toList ps') $ \(xsys :: SV.Vector n (a, a)) -> do
+      Refl <- Proxy @1 `isLE` Proxy @n
+      Refl <- Proxy @2 `isLE` Proxy @n
+      let xs, ys :: SV.Vector (n + 1) a
+          (xs, ys) = SV.unzip $ xy0 `SV.cons` xsys
+          rdxs, dys :: SV.Vector n a
+          rdxs = recip $ SV.tail xs - SV.init xs
+          dys  = SV.tail ys - SV.init ys
+          innerEqs :: SV.Vector (n - 1) ([(Finite (n + 1), a)], a)
+          innerEqs = SV.generate $ \i ->
+            let rdx1 = rdxs `SV.index` weaken i
+                rdx2 = rdxs `SV.index` shift  i
+                dy1  = dys  `SV.index` weaken i
+                dy2  = dys  `SV.index` shift  i
+                cs   = [ (weaken (weaken i), rdx1             )
+                       , (weaken (shift  i), 2 * (rdx1 + rdx2))
+                       , (shift  (shift  i), rdx2             )
+                       ]
+                d    = 3 * (rdx1 * dy1 + rdx2 * dy2)
+            in  (cs, d)
+          startCondition :: ([(Finite (n + 1), a)], a)
+          startCondition = (cs, d)
+            where
+              rdx1 = rdxs `SV.index` minBound
+              rdx2 = rdxs `SV.index` shift minBound
+              rdx1sq = rdx1 * rdx1
+              rdx2sq = rdx2 * rdx2
+              dy1  = dys  `SV.index` minBound
+              dy2  = dys  `SV.index` shift minBound
+              cs = [ (minBound              , rdx1sq         )
+                   , (shift minBound        , rdx1sq - rdx2sq)
+                   , (shift (shift minBound), -rdx2sq        )
+                   ]
+              d  = 2 * (dy1 * rdx1sq * rdx1 - dy2 * rdx2sq * rdx2)
+          endCondition :: ([(Finite (n + 1), a)], a)
+          endCondition = (cs, d)
+            where
+              rdx1 = rdxs `SV.index` weaken maxBound
+              rdx2 = rdxs `SV.index` maxBound
+              rdx1sq = rdx1 * rdx1
+              rdx2sq = rdx2 * rdx2
+              dy1  = dys  `SV.index` weaken maxBound
+              dy2  = dys  `SV.index` maxBound
+              cs = [ (weaken (weaken maxBound), rdx1sq         )
+                   , (weaken maxBound         , rdx1sq - rdx2sq)
+                   , (maxBound                , -rdx2sq        )
+                   ]
+              d  = 2 * (dy1 * rdx1sq * rdx1 - dy2 * rdx2sq * rdx2)
+          allEqs :: SV.Vector (n + 1) ([(Finite (n + 1), a)], a)
+          allEqs = innerEqs
+             SV.++ SV.fromTuple (startCondition, endCondition)
+          dim = fromIntegral (maxBound @(Finite n))
+          mat :: Sparse.SpMatrix a
+          vec :: Sparse.SpVector a
+          (mat, vec) = bimap (Sparse.fromListSM (dim,dim)
+                               . fold
+                               . SV.imap (\(fromIntegral->i) -> map (consTup i . first fromIntegral))
+                             )
+                             (Sparse.fromVector . SV.fromSized)
+                     $ SV.unzip allEqs
+
+      pure undefined
+
+consTup :: a -> (b, c) -> (a, b, c)
+consTup x (y, z) = (x, y, z)
+
+        -- flip fmap (M.minView ps) $ \((x0,y0), ps') ->
+        --            SV.withSizedList (M.toList ps') $ \(xsys :: SV.Vector n (a,a)) ->
+        --              flip fmap (Proxy @1 `isLE` Proxy @n) $ _
+-- makeSpline' [] = Nothing
+-- makeSpline' (x:xs)
+-- makeSpline' ps = SV.withSizedList (M.toList ps) $ \(xsys :: SV.Vector n (a,a)) ->
+--     go xsys <$> Proxy @2 `isLE` Proxy @n
+--   where
+--     xsys
+--     go  :: forall n. KnownNat n
+--         => SV.Vector n (a, a)
+--         -> ((2 <=? n) :~: 'True)
+--         -> Spline a
+--     go xsys Refl = runST $ do
+--         pure _
+--       where
+--         xs :: SV.Vector n a
+--         ys :: SV.Vector n a
+--         (xs, ys) = SV.unzip xsys
+--         dxs = SV.tail xs - SV.init xs

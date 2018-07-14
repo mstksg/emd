@@ -17,12 +17,12 @@ module Numeric.EMD (
   , envelopes
   ) where
 
+-- import           Data.Bitraversable
 -- import           Data.Kind
+-- import           Data.Maybe
 import           Control.Monad
 import           Data.Bifunctor
-import           Data.Bitraversable
 import           Data.Finite
-import           Data.Maybe
 import           Data.Monoid
 import           Debug.Trace
 import           GHC.TypeNats
@@ -52,7 +52,7 @@ testCondition
     -> Bool
 testCondition = \case
     SCStdDev t -> \_ v v' ->
-      let sd = SVG.sum $ SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v'
+      let sd = SVG.sum $ SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x + eps)^(2::Int)) v v'
       in  sd <= t
     SCTimes l  -> \i _ _ -> i >= l
     SCOr  f g -> \i v v' -> testCondition f i v v' || testCondition g i v v'
@@ -113,7 +113,7 @@ envelopes
     -> Maybe (SVG.Vector v (n + 1) a, SVG.Vector v (n + 1) a)
 -- envelopes v = traceShow (M.size mins, M.size maxs) $ do
 envelopes v = do
-    guard $ (M.size mins + M.size maxs) > 4
+    guard $ (M.size mins + M.size maxs) >= 10
     (,) <$> splineAgainst mins
         <*> splineAgainst maxs
   where
@@ -132,23 +132,58 @@ extrema = uncurry process
   where
     go = \case
       Nothing            -> \_ i x -> (Just (x, EQ, i), ([(i,x)],[(i,x)]))
+      -- Nothing            -> \_ i x -> (Just (x, EQ, i), ([],[]))
       Just (!y, !d, !i') -> \mms@(!mins, !maxs) !i !x ->
         let d'       = (x - y) `compare` 0
+            newD     = case d' of
+                         LT -> LT
+                         EQ -> d
+                         GT -> GT
             newLocal = (i', y)
             mms'     = case (d, d') of
               (LT, LT) -> mms
-              (LT, EQ) -> (newLocal : mins, maxs)
+              (LT, EQ) -> (mins, maxs)
               (LT, GT) -> (newLocal : mins, maxs)
               (EQ, _ ) -> mms
               (GT, LT) -> (mins, newLocal : maxs)
-              (GT, EQ) -> (mins, newLocal : maxs)
+              (GT, EQ) -> (mins, maxs)
               (GT, GT) -> mms
-        in  (Just (x, d', i), mms')
+        in  (Just (x, newD, i), mms')
     process = \case
       Just (!y, _, !i') -> join bimap (M.fromDescList . ((i',y):))
-      Nothing           -> join bimap M.fromDescList
-    -- process ()
+      -- Just _  -> join bimap M.fromDescList
+      Nothing -> join bimap M.fromDescList
 
+-- extrema
+--     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+--     => SVG.Vector v n a
+--     -> (M.Map (Finite n) a, M.Map (Finite n) a)
+-- extrema = uncurry process
+--         . SVG.ifoldl' (uncurry go) (Nothing, ([], []))
+--   where
+--     go = \case
+--       Nothing            -> \_ i x -> (Just (x, EQ, i), ([(i,x)],[(i,x)]))
+--       -- Nothing            -> \_ i x -> (Just (x, EQ, i), ([],[]))
+--       Just (!y, !d, !i') -> \mms@(!mins, !maxs) !i !x ->
+--         let d'       = (x - y) `compare` 0
+--             newD     = case d' of
+--                          LT -> LT
+--                          EQ -> d
+--                          GT -> GT
+--             newLocal = (i', y)
+--             mms'     = case (d, d') of
+--               (LT, LT) -> mms
+--               (LT, EQ) -> (mins, maxs)
+--               (LT, GT) -> (newLocal : mins, maxs)
+--               (EQ, _ ) -> mms
+--               (GT, LT) -> (mins, newLocal : maxs)
+--               (GT, EQ) -> (mins, maxs)
+--               (GT, GT) -> mms
+--         in  (Just (x, newD, i), mms')
+--     process = \case
+--       Just (!y, _, !i') -> join bimap (M.fromDescList . ((i',y):))
+--       -- Just _  -> join bimap M.fromDescList
+--       Nothing -> join bimap M.fromDescList
 
 splineAgainst
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)

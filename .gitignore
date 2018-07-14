@@ -1,4 +1,5 @@
 .stack-work/
 emd.cabal
 *~
-/data/
+/data
+/test-data
