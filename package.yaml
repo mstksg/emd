@@ -36,6 +36,8 @@ ghc-options:
 
 library:
   source-dirs: src
+  other-modules:
+    - Numeric.EMD.Util.Tridiagonal
 
 tests:
   emd-test:

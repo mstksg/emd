@@ -2,7 +2,6 @@
 {-# LANGUAGE GADTs                                    #-}
 {-# LANGUAGE LambdaCase                               #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}
-{-# LANGUAGE TypeApplications                         #-}
 {-# LANGUAGE TypeInType                               #-}
 {-# LANGUAGE TypeOperators                            #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
@@ -14,23 +13,17 @@ module Numeric.EMD (
   , SiftCondition(..), defaultSC
   , sift
   -- * Debug
-  , extrema
   , envelopes
   ) where
 
-import           Control.Applicative
-import           Control.Monad
 import           Control.Monad.IO.Class
-import           Data.Bifunctor
-import           Data.Bitraversable
 import           Data.Finite
 import           Data.Functor.Identity
-import           Data.List
 import           GHC.TypeNats
+import           Numeric.EMD.Util.Extrema
 import           Numeric.Spline
 import           Text.Printf
 import qualified Data.Map                  as M
-import qualified Data.Set                  as S
 import qualified Data.Vector.Generic       as VG
 import qualified Data.Vector.Generic.Sized as SVG
 
@@ -81,7 +74,7 @@ emdTrace
     -> SVG.Vector v (n + 2) a
     -> m (EMD v (n + 2) a)
 emdTrace = emd' $ \case
-    SRResidual _ -> liftIO $ putStrLn "Residual found!"
+    SRResidual _ -> liftIO $ putStrLn "Residual found."
     SRIMF _ i    -> liftIO $ printf "IMF found (%d iterations)\n" i
 
 -- | 'emd' with an optional callback for each found IMF.
@@ -130,52 +123,18 @@ sift' v = go <$> envelopes v
 -- the splines.
 --
 -- We add endpoints as both minima and maxima, to match behavior of
--- <http://www.mit.edu/~gari/CODE/HRV/emd.m>
+-- <http://www.mit.edu/~gari/CODE/HRV/emd.m>.  However, the final results
+-- do not match, because of a bug in the exrema-finding code in that
+-- script.
 envelopes
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => SVG.Vector v (n + 2) a
     -> Maybe (SVG.Vector v (n + 2) a, SVG.Vector v (n + 2) a)
-envelopes = join bitraverse splineAgainst <=< extrema
-
--- | Returns local minimums and maximums.
---
--- We add endpoints as both minima and maxima, to match behavior of
--- <http://www.mit.edu/~gari/CODE/HRV/emd.m>
-extrema
-    :: forall v n a. (VG.Vector v a, KnownNat n, Fractional a, Ord a)
-    => SVG.Vector v (n + 2) a
-    -> Maybe (M.Map (Finite (n + 2)) a, M.Map (Finite (n + 2)) a)
-extrema xs = case altList (reverse optima) of
-    alo@(ys@(y:_), zs@(z:_))
-      | y > z     -> Just $ join bimap makeMap (zs, ys)
-      | otherwise -> Just $ join bimap makeMap alo
-    _             -> Nothing
+envelopes xs = (,) <$> splineAgainst (mins `M.union` minMax)
+                   <*> splineAgainst (maxs `M.union` minMax)
   where
-    dxs :: SVG.Vector v (n + 1) a
-    dxs = SVG.tail xs - SVG.init xs
-    optima :: [Finite (n + 1)]
-    optima = foldl' go [] (finites @n)
-      where
-        go os i = case (dx0, dx1) of
-            (EQ, _ ) -> weaken i : os
-            (LT, GT) -> shift  i : os
-            (GT, LT) -> shift  i : os
-            (_ , _ ) -> os
-          where
-            dx0 = compare (dxs `SVG.index` weaken i) 0
-            dx1 = compare (dxs `SVG.index` shift i) 0
-    minMax :: S.Set (Finite (n + 2))
-    minMax = S.fromAscList [minBound, maxBound]
-    makeMap :: [Finite (n + 1)] -> M.Map (Finite (n + 2)) a
-    makeMap = M.fromSet (xs `SVG.index`)
-            . S.union minMax
-            . S.fromAscList
-            . map weaken
-
-altList :: [a] -> ([a], [a])
-altList []       = ([] , [])
-altList [x]      = ([x], [])
-altList (x:y:zs) = bimap (x:) (y:) . altList $ zs
+    minMax = M.fromList [(minBound, SVG.head xs), (maxBound, SVG.last xs)]
+    (mins,maxs) = extrema xs
 
 splineAgainst
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
