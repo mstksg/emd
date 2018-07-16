@@ -63,7 +63,6 @@ makeSpline ps = do
     (xy0, ps') <- M.minViewWithKey ps
     SV.withSizedList (M.toList ps') $ \(xsys :: SV.Vector n (a, a)) -> do
       Refl <- Proxy @1 `isLE` Proxy @n
-      Refl <- Proxy @2 `isLE` Proxy @n
       let xs, ys :: SV.Vector (n + 1) a
           (xs, ys) = SV.unzip $ xy0 `SV.cons` xsys
           dxs, dys :: SV.Vector n a
