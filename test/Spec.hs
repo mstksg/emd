@@ -16,8 +16,10 @@ main = void . runTestTT $ TestList
 splineTest :: Assertion
 splineTest = do
     expected <- map (read @Double) . lines <$> readFile "test-data/sintest.csv"
-    expected @=? samples
+    roundOut expected @=? roundOut samples
   where
+    roundOut :: [Double] -> [Double]
+    roundOut = map $ (/ 1000000) . fromInteger . round . (* 1000000)
     spline :: Spline Double
     spline = fromJust
            . makeSpline
@@ -26,9 +28,4 @@ splineTest = do
            $ [0, 1, 2.5, 3.6, 5, 7, 8.1, 10]
     samples :: [Double]
     samples = sampleSpline spline . (/ 4) . fromInteger <$> [0..40]
-
--- test1 = (8 :: Int) ~=? (3 * 4)
---     -- TestCase $ assertEqual "4 times 2 is 8" 8 (4 * 2)
--- -- doublingBigger = TestCase $ 
--- -- halvingSmaller = TestCase "Half of 9 is 4" $ assertEqual [] 9 (9 `div` 2)
 
