@@ -19,7 +19,7 @@ splineTest = do
     roundOut expected @=? roundOut samples
   where
     roundOut :: [Double] -> [Double]
-    roundOut = map $ (/ 1000000) . fromInteger . round . (* 1000000)
+    roundOut = map $ (/ 10e12) . fromInteger . round . (* 10e12)
     spline :: Spline Double
     spline = fromJust
            . makeSpline

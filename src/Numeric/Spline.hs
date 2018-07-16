@@ -14,14 +14,6 @@ module Numeric.Spline (
   , sampleSpline
   ) where
 
--- import           Control.Applicative.Backwards
--- import           Control.Monad.ST
--- import           Data.Bifunctor
--- import           Data.Foldable
--- import qualified Data.Sparse.SpMatrix          as Sparse
--- import qualified Data.Sparse.SpVector          as Sparse
--- import qualified Data.Vector.Mutable.Sized     as SMV
--- import qualified Numeric.LinearAlgebra.Sparse  as Sparse
 import           Data.Finite
 import           Data.Proxy
 import           Data.Type.Equality
@@ -62,6 +54,7 @@ sampleSpline Spline{..} x = case x `M.lookupLE` splineTail of
       (x0, sc) -> runSplineCoef x0 sc x
     Just (x0, sc) -> runSplineCoef x0 sc x
 
+-- | <https://en.wikipedia.org/wiki/Spline_interpolation#Interpolation_using_natural_cubic_spline>
 makeSpline
     :: forall a. (Ord a, Fractional a)
     => M.Map a a
@@ -93,6 +86,7 @@ makeSpline ps = do
           rhs = SV.zipWith (\dydxsq0 dydxsq1 -> 3 * (dydxsq0 + dydxsq1))
                         (SV.init dydxssq)
                         (SV.tail dydxssq)
+          -- TODO: allow specifying end conditions
           firstRow :: (a, a)     -- main, upper
           firstRow = ( rdxssq `SV.index` minBound + rdx12
                      , rdxssq `SV.index` minBound
@@ -117,12 +111,11 @@ makeSpline ps = do
                      - 3 * (dydxssq `SV.index` maxBound) * (rdxs `SV.index` weaken maxBound)
                      - 2 * (dydxssq `SV.index` maxBound) * (rdxs `SV.index` maxBound)
                    )
-          solution :: SV.Vector (n + 1) a
-          solution = solveTridiagonal (lowerDiag `SV.snoc` fst lastRow)
-                                      (fst firstRow `SV.cons` mainDiag `SV.snoc` snd lastRow)
-                                      (snd firstRow `SV.cons` upperDiag)
-                                      (fst endRhs `SV.cons` rhs `SV.snoc` snd endRhs)
-          as :: SV.Vector n a
+      solution <- solveTridiagonal (lowerDiag `SV.snoc` fst lastRow)
+                                   (fst firstRow `SV.cons` mainDiag `SV.snoc` snd lastRow)
+                                   (snd firstRow `SV.cons` upperDiag)
+                                   (fst endRhs `SV.cons` rhs `SV.snoc` snd endRhs)
+      let as :: SV.Vector n a
           as = SV.zipWith3 (\k dx dy -> k * dx - dy) (SV.init solution) dxs dys
           bs :: SV.Vector n a
           bs = SV.zipWith3 (\k dx dy -> - k * dx + dy) (SV.tail solution) dxs dys

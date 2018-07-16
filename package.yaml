@@ -29,11 +29,10 @@ dependencies:
 - ghc-typelits-natnormalise
 - ghc-typelits-knownnat
 - typelits-witnesses
-- hmatrix
-- sparse-linear-algebra
 
 ghc-options:
 - -Wall
+- -fwarn-redundant-constraints
 
 library:
   source-dirs: src
