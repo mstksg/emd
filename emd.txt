@@ -2,14 +2,18 @@
 -- See Hoogle, http://www.haskell.org/hoogle/
 
 
--- | Hilbert-Huang Transform/Empirical Mode Decomposition
+-- | Empirical Mode Decomposition (Hilbert-Huang Transform)
 --   
 --   Please see the README on GitHub at
 --   <a>https://github.com/mstksg/emd#readme</a>
 @package emd
 @version 0.1.0.0
 
-module Numeric.Spline
+
+-- | Internal splining functionality exported for testing purposes only.
+--   This will likely go away in future versions, so please do not depend
+--   on this!
+module Numeric.EMD.Internal.Spline
 
 -- | 1D Cubic spline
 data Spline a
@@ -27,11 +31,19 @@ makeSpline :: forall a. (Ord a, Fractional a) => SplineEnd -> Map a a -> Maybe (
 
 -- | Sample a spline at a given point.
 sampleSpline :: (Fractional a, Ord a) => Spline a -> a -> a
-instance GHC.Show.Show a => GHC.Show.Show (Numeric.Spline.SplineCoef a)
-instance GHC.Classes.Ord Numeric.Spline.SplineEnd
-instance GHC.Classes.Eq Numeric.Spline.SplineEnd
-instance GHC.Show.Show Numeric.Spline.SplineEnd
+instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.Internal.Spline.SplineCoef a)
+instance GHC.Classes.Ord Numeric.EMD.Internal.Spline.SplineEnd
+instance GHC.Classes.Eq Numeric.EMD.Internal.Spline.SplineEnd
+instance GHC.Show.Show Numeric.EMD.Internal.Spline.SplineEnd
 
+
+-- | Empirical Mode Decomposition (Hilbert-Huang Transform) in pure
+--   Haskell.
+--   
+--   Main interface is <a>emd</a>, with <a>defaultEO</a>. A tracing version
+--   that outputs a log to stdout is also available, as <a>emdTrace</a>.
+--   This can be used to help track down a specific IMF that might be
+--   taking more time than desired.
 module Numeric.EMD
 
 -- | EMD decomposition (Hilbert-Huang Transform) of a given time series
@@ -93,8 +105,14 @@ data SplineEnd
 SENotAKnot :: SplineEnd
 SENatural :: SplineEnd
 
--- | Iterated sifting process.
+-- | Iterated sifting process, used to produce either an IMF or a residual.
 sift :: (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (n + 2) a -> SiftResult v (n + 2) a
+
+-- | The result of a sifting operation. Each sift either yields a residual,
+--   or a new IMF.
+data SiftResult v n a
+SRResidual :: !(Vector v n a) -> SiftResult v n a
+SRIMF :: !(Vector v n a) -> !Int -> SiftResult v n a
 
 -- | Returns cubic splines of local minimums and maximums. Returns
 --   <a>Nothing</a> if there are not enough local minimum or maximums to
