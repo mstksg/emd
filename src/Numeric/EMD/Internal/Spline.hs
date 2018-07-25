@@ -43,11 +43,11 @@ data SplineEnd = SENotAKnot
                | SENatural
   deriving (Show, Eq, Ord)
 
-data SplineCoef a = SC { scAlpha  :: !a      -- ^ a
-                       , scBeta   :: !a      -- ^ b
-                       , scGamma0 :: !a      -- ^ y_{i-1}
-                       , scGamma1 :: !a      -- ^ y_i
-                       , scDelta  :: !a      -- ^ x_i - x_{i-1}
+data SplineCoef a = SC { _scAlpha  :: !a      -- ^ a
+                       , _scBeta   :: !a      -- ^ b
+                       , _scGamma0 :: !a      -- ^ y_{i-1}
+                       , _scGamma1 :: !a      -- ^ y_i
+                       , _scDelta  :: !a      -- ^ x_i - x_{i-1}
                        }
   deriving Show
 
@@ -91,6 +91,7 @@ makeSpline
     -> M.Map a a            -- ^ (x, y)
     -> Maybe (Spline a)
 makeSpline se ps = SV.withSizedList (M.toList ps) $ \(xsys :: SV.Vector n (a, a)) -> do
+      Refl <- Proxy @1 `isLE` Proxy @n
       Refl <- Proxy @2 `isLE` Proxy @n
       let xs, ys :: SV.Vector n a
           (xs, ys) = SV.unzip xsys
@@ -117,10 +118,10 @@ makeSpline se ps = SV.withSizedList (M.toList ps) $ \(xsys :: SV.Vector n (a, a)
           EE{..} = case se of
             SENotAKnot -> notAKnot rdxs rdxssq dydxssq
             SENatural  -> natural rdxs dydxssq
-      solution <- solveTridiagonal (lowerDiag `SV.snoc` eeLower1)
-                                   (eeMain0 `SV.cons` mainDiag `SV.snoc` eeMain1)
-                                   (eeUpper0 `SV.cons` upperDiag)
-                                   (eeRhs0 `SV.cons` rhs `SV.snoc` eeRhs1)
+      solution <- solveTridiagonal (                    lowerDiag `SV.snoc` eeLower1)
+                                   (eeMain0   `SV.cons` mainDiag  `SV.snoc` eeMain1 )
+                                   (eeUpper0  `SV.cons` upperDiag                   )
+                                   (eeRhs0    `SV.cons` rhs       `SV.snoc` eeRhs1  )
       let as :: SV.Vector (n - 1) a
           as = SV.zipWith3 (\k dx dy -> k * dx - dy) (SV.init solution) dxs dys
           bs :: SV.Vector (n - 1) a
