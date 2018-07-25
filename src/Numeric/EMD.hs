@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns                             #-}
 {-# LANGUAGE GADTs                                    #-}
 {-# LANGUAGE LambdaCase                               #-}
+{-# LANGUAGE RecordWildCards                          #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}
 {-# LANGUAGE TypeInType                               #-}
 {-# LANGUAGE TypeOperators                            #-}
@@ -10,7 +11,7 @@
 module Numeric.EMD (
     emd, emdTrace, emd'
   , EMD(..)
-  , SiftCondition(..), defaultSC
+  , EMDOpts(..), defaultEO, SiftCondition(..), defaultSC
   , sift
   -- * Debug
   , envelopes
@@ -27,11 +28,22 @@ import qualified Data.Map                  as M
 import qualified Data.Vector.Generic       as VG
 import qualified Data.Vector.Generic.Sized as SVG
 
+data EMDOpts a = EO { eoSiftCondition :: SiftCondition a
+                    , eoSplineEnd     :: SplineEnd
+                    }
+  deriving (Show, Eq, Ord)
+
+defaultEO :: Fractional a => EMDOpts a
+defaultEO = EO { eoSiftCondition = defaultSC
+               , eoSplineEnd     = SENotAKnot
+               }
+
+
 data SiftCondition a = SCStdDev a
                      | SCTimes Int
                      | SCOr (SiftCondition a) (SiftCondition a)
                      | SCAnd (SiftCondition a) (SiftCondition a)
-  deriving Show
+  deriving (Show, Eq, Ord)
 
 defaultSC :: Fractional a => SiftCondition a
 defaultSC = SCStdDev 0.3
@@ -62,15 +74,15 @@ data EMD v n a = EMD { emdIMFs     :: ![SVG.Vector v n a]
 -- | EMD decomposition (Hilbert-Huang Transform) of a given time series
 -- with a given sifting stop condition.
 emd :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
-    => SiftCondition a
+    => EMDOpts a
     -> SVG.Vector v (n + 2) a
     -> EMD v (n + 2) a
-emd sc = runIdentity . emd' (const (pure ())) sc
+emd eo = runIdentity . emd' (const (pure ())) eo
 
 -- | 'emd', but tracing results as IMFs are found.
 emdTrace
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m)
-    => SiftCondition a
+    => EMDOpts a
     -> SVG.Vector v (n + 2) a
     -> m (EMD v (n + 2) a)
 emdTrace = emd' $ \case
@@ -81,16 +93,16 @@ emdTrace = emd' $ \case
 emd'
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, Applicative m)
     => (SiftResult v (n + 2) a -> m r)
-    -> SiftCondition a
+    -> EMDOpts a
     -> SVG.Vector v (n + 2) a
     -> m (EMD v (n + 2) a)
-emd'  cb sc = go id
+emd' cb eo = go id
   where
     go !imfs !v = cb res *> case res of
         SRResidual r -> pure $ EMD (imfs []) r
         SRIMF v' _   -> go (imfs . (v':)) (v - v')
       where
-        res = sift sc v
+        res = sift eo v
 
 data SiftResult v n a = SRResidual !(SVG.Vector v n a)
                       | SRIMF      !(SVG.Vector v n a) !Int   -- number of iterations
@@ -98,23 +110,24 @@ data SiftResult v n a = SRResidual !(SVG.Vector v n a)
 -- | Iterated sifting process.
 sift
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
-    => SiftCondition a
+    => EMDOpts a
     -> SVG.Vector v (n + 2) a
     -> SiftResult v (n + 2) a
-sift sc = go 1
+sift EO{..} = go 1
   where
-    go !i !v = case sift' v of
+    go !i !v = case sift' eoSplineEnd v of
       Nothing -> SRResidual v
       Just !v'
-        | testCondition sc i v v' -> SRIMF v' i
-        | otherwise               -> go (i + 1) v'
+        | testCondition eoSiftCondition i v v' -> SRIMF v' i
+        | otherwise                            -> go (i + 1) v'
 
 -- | Single sift
 sift'
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
-    => SVG.Vector v (n + 2) a
+    => SplineEnd
+    -> SVG.Vector v (n + 2) a
     -> Maybe (SVG.Vector v (n + 2) a)
-sift' v = go <$> envelopes v
+sift' se v = go <$> envelopes se v
   where
     go (mins, maxs) = SVG.zipWith3 (\x mi ma -> x - (mi + ma)/2) v mins maxs
 
@@ -128,18 +141,20 @@ sift' v = go <$> envelopes v
 -- script.
 envelopes
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
-    => SVG.Vector v (n + 2) a
+    => SplineEnd
+    -> SVG.Vector v (n + 2) a
     -> Maybe (SVG.Vector v (n + 2) a, SVG.Vector v (n + 2) a)
-envelopes xs = (,) <$> splineAgainst (mins `M.union` minMax)
-                   <*> splineAgainst (maxs `M.union` minMax)
+envelopes se xs = (,) <$> splineAgainst se (mins `M.union` minMax)
+                      <*> splineAgainst se (maxs `M.union` minMax)
   where
     minMax = M.fromList [(minBound, SVG.head xs), (maxBound, SVG.last xs)]
     (mins,maxs) = extrema xs
 
 splineAgainst
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
-    => M.Map (Finite n) a
+    => SplineEnd
+    -> M.Map (Finite n) a
     -> Maybe (SVG.Vector v n a)
-splineAgainst = fmap go . makeSpline . M.mapKeysMonotonic fromIntegral
+splineAgainst se = fmap go . makeSpline se . M.mapKeysMonotonic fromIntegral
   where
     go spline = SVG.generate (sampleSpline spline . fromIntegral)
