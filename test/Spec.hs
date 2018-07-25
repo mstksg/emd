@@ -22,7 +22,7 @@ splineTest = do
     roundOut = map $ (/ 10e12) . fromInteger . round . (* 10e12)
     spline :: Spline Double
     spline = fromJust
-           . makeSpline
+           . makeSpline SENotAKnot
            . M.fromSet sin
            . S.fromList
            $ [0, 1, 2.5, 3.6, 5, 7, 8.1, 10]

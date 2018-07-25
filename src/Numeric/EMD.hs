@@ -13,7 +13,7 @@ module Numeric.EMD (
   , emdTrace
   , emd'
   , EMD(..)
-  , EMDOpts(..), defaultEO, SiftCondition(..), defaultSC
+  , EMDOpts(..), defaultEO, SiftCondition(..), defaultSC, SplineEnd(..)
   , sift
   -- * Debug
   , envelopes
