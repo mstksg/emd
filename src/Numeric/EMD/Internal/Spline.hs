@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeOperators                            #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
+{-# OPTIONS_HADDOCK not-home                          #-}
 
 -- |
 -- Module      : Numeric.EMD.Internal.Spline
