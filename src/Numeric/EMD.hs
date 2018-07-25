@@ -24,6 +24,20 @@
 -- used to help track down a specific IMF that might be taking more time
 -- than desired.
 --
+-- This package uses "sized vectors" as its main interface, to ensure:
+--
+-- 1.  The resulting 'EMD' contains IMFs that are all the same length as
+--     the input vector
+-- 2.  We provide a vector of size of at least one.
+--
+-- There are many functions to convert unsized vectors to sized vectors in
+-- "Data.Vector.Sized" and associated modules, including 'toSized' (for
+-- when you know the size at compile-time) and 'withSized' (for when you
+-- don't).
+--
+-- However, for convenience, "Numeric.EMD.Unsized" is provided with an
+-- unsafe unsized interface.
+--
 
 module Numeric.EMD (
   -- * EMD (Hilbert-Huang Transform)
@@ -101,10 +115,16 @@ data EMD v n a = EMD { emdIMFs     :: ![SVG.Vector v n a]
 
 -- | EMD decomposition (Hilbert-Huang Transform) of a given time series
 -- with a given sifting stop condition.
+--
+-- Takes a sized vector to ensure that:
+--
+-- 1.  The resulting 'EMD' contains IMFs that are all the same length as
+--     the input vector
+-- 2.  We provide a vector of size of at least one.
 emd :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => EMDOpts a
-    -> SVG.Vector v (n + 2) a
-    -> EMD v (n + 2) a
+    -> SVG.Vector v (n + 1) a
+    -> EMD v (n + 1) a
 emd eo = runIdentity . emd' (const (pure ())) eo
 
 -- | 'emd', but tracing results to stdout as IMFs are found.  Useful for
@@ -112,8 +132,8 @@ emd eo = runIdentity . emd' (const (pure ())) eo
 emdTrace
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m)
     => EMDOpts a
-    -> SVG.Vector v (n + 2) a
-    -> m (EMD v (n + 2) a)
+    -> SVG.Vector v (n + 1) a
+    -> m (EMD v (n + 1) a)
 emdTrace = emd' $ \case
     SRResidual _ -> liftIO $ putStrLn "Residual found."
     SRIMF _ i    -> liftIO $ printf "IMF found (%d iterations)\n" i
@@ -121,10 +141,10 @@ emdTrace = emd' $ \case
 -- | 'emd' with a callback for each found IMF.
 emd'
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, Applicative m)
-    => (SiftResult v (n + 2) a -> m r)
+    => (SiftResult v (n + 1) a -> m r)
     -> EMDOpts a
-    -> SVG.Vector v (n + 2) a
-    -> m (EMD v (n + 2) a)
+    -> SVG.Vector v (n + 1) a
+    -> m (EMD v (n + 1) a)
 emd' cb eo = go id
   where
     go !imfs !v = cb res *> case res of
@@ -136,14 +156,14 @@ emd' cb eo = go id
 -- | The result of a sifting operation.  Each sift either yields
 -- a residual, or a new IMF.
 data SiftResult v n a = SRResidual !(SVG.Vector v n a)
-                      | SRIMF      !(SVG.Vector v n a) !Int   -- number of iterations
+                      | SRIMF      !(SVG.Vector v n a) !Int   -- ^ number of iterations
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
 sift
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => EMDOpts a
-    -> SVG.Vector v (n + 2) a
-    -> SiftResult v (n + 2) a
+    -> SVG.Vector v (n + 1) a
+    -> SiftResult v (n + 1) a
 sift EO{..} = go 1
   where
     go !i !v = case sift' eoSplineEnd eoClampEnvelope v of
@@ -157,8 +177,8 @@ sift'
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => SplineEnd
     -> Bool
-    -> SVG.Vector v (n + 2) a
-    -> Maybe (SVG.Vector v (n + 2) a)
+    -> SVG.Vector v (n + 1) a
+    -> Maybe (SVG.Vector v (n + 1) a)
 sift' se cl v = go <$> envelopes se cl v
   where
     go (mins, maxs) = SVG.zipWith3 (\x mi ma -> x - (mi + ma)/2) v mins maxs
@@ -170,8 +190,8 @@ envelopes
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => SplineEnd
     -> Bool
-    -> SVG.Vector v (n + 2) a
-    -> Maybe (SVG.Vector v (n + 2) a, SVG.Vector v (n + 2) a)
+    -> SVG.Vector v (n + 1) a
+    -> Maybe (SVG.Vector v (n + 1) a, SVG.Vector v (n + 1) a)
 envelopes se cl xs = (,) <$> splineAgainst se mins'
                          <*> splineAgainst se maxs'
   where
