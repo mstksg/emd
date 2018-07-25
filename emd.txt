@@ -7,7 +7,7 @@
 --   Please see the README on GitHub at
 --   <a>https://github.com/mstksg/emd#readme</a>
 @package emd
-@version 0.1.0.0
+@version 0.1.1.0
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -44,18 +44,42 @@ instance GHC.Show.Show Numeric.EMD.Internal.Spline.SplineEnd
 --   that outputs a log to stdout is also available, as <a>emdTrace</a>.
 --   This can be used to help track down a specific IMF that might be
 --   taking more time than desired.
+--   
+--   This package uses "sized vectors" as its main interface, to ensure:
+--   
+--   <ol>
+--   <li>The resulting <a>EMD</a> contains IMFs that are all the same
+--   length as the input vector</li>
+--   <li>We provide a vector of size of at least one.</li>
+--   </ol>
+--   
+--   There are many functions to convert unsized vectors to sized vectors
+--   in <a>Data.Vector.Sized</a> and associated modules, including
+--   <tt>toSized</tt> (for when you know the size at compile-time) and
+--   <tt>withSized</tt> (for when you don't).
+--   
+--   However, for convenience, <a>Numeric.EMD.Unsized</a> is provided with
+--   an unsafe unsized interface.
 module Numeric.EMD
 
 -- | EMD decomposition (Hilbert-Huang Transform) of a given time series
 --   with a given sifting stop condition.
-emd :: (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (n + 2) a -> EMD v (n + 2) a
+--   
+--   Takes a sized vector to ensure that:
+--   
+--   <ol>
+--   <li>The resulting <a>EMD</a> contains IMFs that are all the same
+--   length as the input vector</li>
+--   <li>We provide a vector of size of at least one.</li>
+--   </ol>
+emd :: (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (n + 1) a -> EMD v (n + 1) a
 
 -- | <a>emd</a>, but tracing results to stdout as IMFs are found. Useful
 --   for debugging to see how long each step is taking.
-emdTrace :: (Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m) => EMDOpts a -> Vector v (n + 2) a -> m (EMD v (n + 2) a)
+emdTrace :: (Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m) => EMDOpts a -> Vector v (n + 1) a -> m (EMD v (n + 1) a)
 
 -- | <a>emd</a> with a callback for each found IMF.
-emd' :: (Vector v a, KnownNat n, Fractional a, Ord a, Applicative m) => (SiftResult v (n + 2) a -> m r) -> EMDOpts a -> Vector v (n + 2) a -> m (EMD v (n + 2) a)
+emd' :: (Vector v a, KnownNat n, Fractional a, Ord a, Applicative m) => (SiftResult v (n + 1) a -> m r) -> EMDOpts a -> Vector v (n + 1) a -> m (EMD v (n + 1) a)
 
 -- | An <tt><a>EMD</a> v n a</tt> is a Hilbert-Huang transform of a time
 --   series with <tt>n</tt> items of type <tt>a</tt> stored in a vector
@@ -106,18 +130,20 @@ SENotAKnot :: SplineEnd
 SENatural :: SplineEnd
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
-sift :: (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (n + 2) a -> SiftResult v (n + 2) a
+sift :: (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (n + 1) a -> SiftResult v (n + 1) a
 
 -- | The result of a sifting operation. Each sift either yields a residual,
 --   or a new IMF.
 data SiftResult v n a
 SRResidual :: !(Vector v n a) -> SiftResult v n a
+
+-- | number of iterations
 SRIMF :: !(Vector v n a) -> !Int -> SiftResult v n a
 
 -- | Returns cubic splines of local minimums and maximums. Returns
 --   <a>Nothing</a> if there are not enough local minimum or maximums to
 --   create the splines.
-envelopes :: (Vector v a, KnownNat n, Fractional a, Ord a) => SplineEnd -> Bool -> Vector v (n + 2) a -> Maybe (Vector v (n + 2) a, Vector v (n + 2) a)
+envelopes :: (Vector v a, KnownNat n, Fractional a, Ord a) => SplineEnd -> Bool -> Vector v (n + 1) a -> Maybe (Vector v (n + 1) a, Vector v (n + 1) a)
 instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.EMD.EMD v n a)
 instance GHC.Classes.Ord a => GHC.Classes.Ord (Numeric.EMD.EMDOpts a)
 instance GHC.Classes.Eq a => GHC.Classes.Eq (Numeric.EMD.EMDOpts a)
@@ -125,3 +151,90 @@ instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.EMDOpts a)
 instance GHC.Classes.Ord a => GHC.Classes.Ord (Numeric.EMD.SiftCondition a)
 instance GHC.Classes.Eq a => GHC.Classes.Eq (Numeric.EMD.SiftCondition a)
 instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.SiftCondition a)
+
+
+-- | Interface of <a>Numeric.EMD</a> re-exported in a non-typesafe
+--   "unsized" form. Can be more convenient in certain situations, but
+--   <a>Numeric.EMD</a> is recommended and preferred.
+module Numeric.EMD.Unsized
+
+-- | EMD decomposition (Hilbert-Huang Transform) of a given time series
+--   with a given sifting stop condition.
+--   
+--   Returns <a>Nothing</a> if given an empty vector.
+--   
+--   See <a>emd</a> for a type-safe version with guaruntees on the output
+--   vector sizes.
+emd :: (Vector v a, Fractional a, Ord a) => EMDOpts a -> v a -> Maybe (EMD v a)
+
+-- | <a>emd</a>, but tracing results to stdout as IMFs are found. Useful
+--   for debugging to see how long each step is taking.
+--   
+--   Returns <a>Nothing</a> if given an empty vector.
+emdTrace :: (Vector v a, Fractional a, Ord a, MonadIO m) => EMDOpts a -> v a -> m (Maybe (EMD v a))
+
+-- | <a>emd</a> with a callback for each found IMF.
+--   
+--   Returns <a>Nothing</a> if given an empty vector.
+emd' :: (Vector v a, Ord a, Fractional a, Applicative m) => (SiftResult v a -> m r) -> EMDOpts a -> v a -> m (Maybe (EMD v a))
+
+-- | An <tt><a>EMD</a> v a</tt> is a Hilbert-Huang transform of a time
+--   series with items of type <tt>a</tt> stored in a vector <tt>v</tt>.
+data EMD v a
+EMD :: ![v a] -> !(v a) -> EMD v a
+[emdIMFs] :: EMD v a -> ![v a]
+[emdResidual] :: EMD v a -> !(v a)
+
+-- | Options for EMD composition.
+data EMDOpts a
+EO :: SiftCondition a -> SplineEnd -> Bool -> EMDOpts a
+
+-- | stop condition for sifting
+[eoSiftCondition] :: EMDOpts a -> SiftCondition a
+
+-- | end conditions for envelope splines
+[eoSplineEnd] :: EMDOpts a -> SplineEnd
+
+-- | if <a>True</a>, use time series endpoints as part of min and max
+--   envelopes
+[eoClampEnvelope] :: EMDOpts a -> Bool
+
+-- | Default <a>EMDOpts</a>
+defaultEO :: Fractional a => EMDOpts a
+
+-- | Stop conditions for sifting process
+data SiftCondition a
+
+-- | Stop using standard <a>SD</a> method
+SCStdDev :: a -> SiftCondition a
+
+-- | Stop after a fixed number of iterations
+SCTimes :: Int -> SiftCondition a
+
+-- | one or the other
+SCOr :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
+
+-- | both conditions met
+SCAnd :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
+
+-- | Default <a>SiftCondition</a>
+defaultSC :: Fractional a => SiftCondition a
+
+-- | End condition for spline
+data SplineEnd
+SENotAKnot :: SplineEnd
+SENatural :: SplineEnd
+
+-- | Iterated sifting process, used to produce either an IMF or a residual.
+--   
+--   Returns <a>Nothing</a> if given an empty vector.
+sift :: (Vector v a, Fractional a, Ord a) => EMDOpts a -> v a -> Maybe (SiftResult v a)
+
+-- | The result of a sifting operation. Each sift either yields a residual,
+--   or a new IMF.
+data SiftResult v a
+SRResidual :: !(v a) -> SiftResult v a
+
+-- | number of iterations
+SRIMF :: !(v a) -> !Int -> SiftResult v a
+instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.EMD.Unsized.EMD v a)
