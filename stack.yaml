@@ -35,10 +35,6 @@ resolver: nightly-2018-07-16
 #  - wai
 packages:
 - .
-- location: 
-    git: git@github.com:mstksg/interactive-plot.git
-    commit: 69e2abb2ea1586dd21f3c4151910b3980b541f0f
-  extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
