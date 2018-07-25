@@ -9,15 +9,17 @@ copyright:           "(c) Justin Le 2018"
 extra-source-files:
 - README.md
 - CHANGELOG.md
+- test-data/*
 
 # Metadata used when publishing your package
-synopsis:            Hilbert-Huang Transform/Empirical Mode Decomposition
+synopsis:            Empirical Mode Decomposition (Hilbert-Huang Transform)
 category:            Math
 
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
 description:         Please see the README on GitHub at <https://github.com/mstksg/emd#readme>
+tested-with:         GHC >= 8.2
 
 dependencies:
 - base >= 4.7 && < 5
@@ -30,8 +32,8 @@ ghc-options:
 library:
   source-dirs: src
   other-modules:
-    - Numeric.EMD.Util.Tridiagonal
-    - Numeric.EMD.Util.Extrema
+    - Numeric.EMD.Internal.Tridiagonal
+    - Numeric.EMD.Internal.Extrema
   dependencies:
   - finite-typelits
   - ghc-typelits-knownnat

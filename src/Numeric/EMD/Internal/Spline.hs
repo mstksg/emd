@@ -8,7 +8,21 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
-module Numeric.Spline (
+-- |
+-- Module      : Numeric.EMD.Internal.Spline
+-- Copyright   : (c) Justin Le 2018
+-- License     : BSD3
+--
+-- Maintainer  : justin@jle.im
+-- Stability   : experimental
+-- Portability : non-portable
+--
+-- Internal splining functionality exported for testing purposes only.
+-- This will likely go away in future versions, so please do not depend on
+-- this!
+--
+
+module Numeric.EMD.Internal.Spline (
     Spline, SplineEnd(..)
   , makeSpline
   , sampleSpline
@@ -19,7 +33,7 @@ import           Data.Proxy
 import           Data.Type.Equality
 import           GHC.TypeLits.Compare
 import           GHC.TypeNats
-import           Numeric.EMD.Util.Tridiagonal
+import           Numeric.EMD.Internal.Tridiagonal
 import qualified Data.Map                         as M
 import qualified Data.Vector.Sized                as SV
 

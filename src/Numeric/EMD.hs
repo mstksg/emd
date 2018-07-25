@@ -8,14 +8,32 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
+-- |
+-- Module      : Numeric.EMD
+-- Copyright   : (c) Justin Le 2018
+-- License     : BSD3
+--
+-- Maintainer  : justin@jle.im
+-- Stability   : experimental
+-- Portability : non-portable
+--
+-- Empirical Mode Decomposition (Hilbert-Huang Transform) in pure Haskell.
+--
+-- Main interface is 'emd', with 'defaultEO'.  A tracing version that
+-- outputs a log to stdout is also available, as 'emdTrace'.  This can be
+-- used to help track down a specific IMF that might be taking more time
+-- than desired.
+--
+
 module Numeric.EMD (
+  -- * EMD (Hilbert-Huang Transform)
     emd
   , emdTrace
   , emd'
   , EMD(..)
   , EMDOpts(..), defaultEO, SiftCondition(..), defaultSC, SplineEnd(..)
-  , sift
-  -- * Debug
+  -- * Internal
+  , sift, SiftResult(..)
   , envelopes
   ) where
 
@@ -23,12 +41,12 @@ import           Control.Monad.IO.Class
 import           Data.Finite
 import           Data.Functor.Identity
 import           GHC.TypeNats
-import           Numeric.EMD.Util.Extrema
-import           Numeric.Spline
+import           Numeric.EMD.Internal.Extrema
+import           Numeric.EMD.Internal.Spline
 import           Text.Printf
-import qualified Data.Map                  as M
-import qualified Data.Vector.Generic       as VG
-import qualified Data.Vector.Generic.Sized as SVG
+import qualified Data.Map                     as M
+import qualified Data.Vector.Generic          as VG
+import qualified Data.Vector.Generic.Sized    as SVG
 
 -- | Options for EMD composition.
 data EMDOpts a = EO { eoSiftCondition :: SiftCondition a  -- ^ stop condition for sifting
@@ -120,7 +138,7 @@ emd' cb eo = go id
 data SiftResult v n a = SRResidual !(SVG.Vector v n a)
                       | SRIMF      !(SVG.Vector v n a) !Int   -- number of iterations
 
--- | Iterated sifting process.
+-- | Iterated sifting process, used to produce either an IMF or a residual.
 sift
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => EMDOpts a

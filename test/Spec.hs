@@ -1,12 +1,11 @@
 {-# LANGUAGE TypeApplications #-}
 
--- import qualified Data.Vector as V
 import           Control.Monad
 import           Data.Maybe
-import           Numeric.Spline
+import           Numeric.EMD.Internal.Spline
 import           Test.HUnit
-import qualified Data.Map       as M
-import qualified Data.Set       as S
+import qualified Data.Map                as M
+import qualified Data.Set                as S
 
 main :: IO ()
 main = void . runTestTT $ TestList

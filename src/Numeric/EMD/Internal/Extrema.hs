@@ -6,7 +6,7 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
-module Numeric.EMD.Util.Extrema (
+module Numeric.EMD.Internal.Extrema (
     extrema
   ) where
 
