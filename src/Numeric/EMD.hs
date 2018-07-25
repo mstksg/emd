@@ -9,7 +9,9 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
 module Numeric.EMD (
-    emd, emdTrace, emd'
+    emd
+  , emdTrace
+  , emd'
   , EMD(..)
   , EMDOpts(..), defaultEO, SiftCondition(..), defaultSC
   , sift
@@ -28,23 +30,29 @@ import qualified Data.Map                  as M
 import qualified Data.Vector.Generic       as VG
 import qualified Data.Vector.Generic.Sized as SVG
 
-data EMDOpts a = EO { eoSiftCondition :: SiftCondition a
-                    , eoSplineEnd     :: SplineEnd
+-- | Options for EMD composition.
+data EMDOpts a = EO { eoSiftCondition :: SiftCondition a  -- ^ stop condition for sifting
+                    , eoSplineEnd     :: SplineEnd        -- ^ end conditions for envelope splines
+                    , eoClampEnvelope :: Bool             -- ^ if 'True', use time series endpoints as part of min and max envelopes
                     }
   deriving (Show, Eq, Ord)
 
+-- | Default 'EMDOpts'
 defaultEO :: Fractional a => EMDOpts a
 defaultEO = EO { eoSiftCondition = defaultSC
                , eoSplineEnd     = SENotAKnot
+               , eoClampEnvelope = True
                }
 
 
-data SiftCondition a = SCStdDev a
-                     | SCTimes Int
-                     | SCOr (SiftCondition a) (SiftCondition a)
-                     | SCAnd (SiftCondition a) (SiftCondition a)
+-- | Stop conditions for sifting process
+data SiftCondition a = SCStdDev a         -- ^ Stop using standard "SD" method
+                     | SCTimes Int        -- ^ Stop after a fixed number of iterations
+                     | SCOr (SiftCondition a) (SiftCondition a)   -- ^ one or the other
+                     | SCAnd (SiftCondition a) (SiftCondition a)  -- ^ both conditions met
   deriving (Show, Eq, Ord)
 
+-- | Default 'SiftCondition'
 defaultSC :: Fractional a => SiftCondition a
 defaultSC = SCStdDev 0.3
 
@@ -66,6 +74,8 @@ testCondition = \case
   where
     eps = 0.0000001
 
+-- | An @'EMD' v n a@ is a Hilbert-Huang transform of a time series with
+-- @n@ items of type @a@ stored in a vector @v@.
 data EMD v n a = EMD { emdIMFs     :: ![SVG.Vector v n a]
                      , emdResidual :: !(SVG.Vector v n a)
                      }
@@ -79,7 +89,8 @@ emd :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     -> EMD v (n + 2) a
 emd eo = runIdentity . emd' (const (pure ())) eo
 
--- | 'emd', but tracing results as IMFs are found.
+-- | 'emd', but tracing results to stdout as IMFs are found.  Useful for
+-- debugging to see how long each step is taking.
 emdTrace
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m)
     => EMDOpts a
@@ -89,7 +100,7 @@ emdTrace = emd' $ \case
     SRResidual _ -> liftIO $ putStrLn "Residual found."
     SRIMF _ i    -> liftIO $ printf "IMF found (%d iterations)\n" i
 
--- | 'emd' with an optional callback for each found IMF.
+-- | 'emd' with a callback for each found IMF.
 emd'
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, Applicative m)
     => (SiftResult v (n + 2) a -> m r)
@@ -104,6 +115,8 @@ emd' cb eo = go id
       where
         res = sift eo v
 
+-- | The result of a sifting operation.  Each sift either yields
+-- a residual, or a new IMF.
 data SiftResult v n a = SRResidual !(SVG.Vector v n a)
                       | SRIMF      !(SVG.Vector v n a) !Int   -- number of iterations
 
@@ -115,7 +128,7 @@ sift
     -> SiftResult v (n + 2) a
 sift EO{..} = go 1
   where
-    go !i !v = case sift' eoSplineEnd v of
+    go !i !v = case sift' eoSplineEnd eoClampEnvelope v of
       Nothing -> SRResidual v
       Just !v'
         | testCondition eoSiftCondition i v v' -> SRIMF v' i
@@ -125,31 +138,32 @@ sift EO{..} = go 1
 sift'
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => SplineEnd
+    -> Bool
     -> SVG.Vector v (n + 2) a
     -> Maybe (SVG.Vector v (n + 2) a)
-sift' se v = go <$> envelopes se v
+sift' se cl v = go <$> envelopes se cl v
   where
     go (mins, maxs) = SVG.zipWith3 (\x mi ma -> x - (mi + ma)/2) v mins maxs
 
 -- | Returns cubic splines of local minimums and maximums.  Returns
 -- 'Nothing' if there are not enough local minimum or maximums to create
 -- the splines.
---
--- We add endpoints as both minima and maxima, to match behavior of
--- <http://www.mit.edu/~gari/CODE/HRV/emd.m>.  However, the final results
--- do not match, because of a bug in the exrema-finding code in that
--- script.
 envelopes
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => SplineEnd
+    -> Bool
     -> SVG.Vector v (n + 2) a
     -> Maybe (SVG.Vector v (n + 2) a, SVG.Vector v (n + 2) a)
-envelopes se xs = (,) <$> splineAgainst se (mins `M.union` minMax)
-                      <*> splineAgainst se (maxs `M.union` minMax)
+envelopes se cl xs = (,) <$> splineAgainst se mins'
+                         <*> splineAgainst se maxs'
   where
     minMax = M.fromList [(minBound, SVG.head xs), (maxBound, SVG.last xs)]
     (mins,maxs) = extrema xs
+    (mins', maxs')
+      | cl        = (mins `M.union` minMax, maxs `M.union` minMax)
+      | otherwise = (mins, maxs)
 
+-- | Build a splined vector against a map of control points.
 splineAgainst
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => SplineEnd

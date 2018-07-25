@@ -38,6 +38,8 @@ library:
   source-dirs: src
   other-modules:
     - Numeric.EMD.Util.Tridiagonal
+    - Numeric.EMD.Util.Extrema
+    - Numeric.Spline
 
 tests:
   emd-test:

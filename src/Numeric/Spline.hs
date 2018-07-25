@@ -23,6 +23,7 @@ import           Numeric.EMD.Util.Tridiagonal
 import qualified Data.Map                         as M
 import qualified Data.Vector.Sized                as SV
 
+-- | End condition for spline
 data SplineEnd = SENotAKnot
                | SENatural
   deriving (Show, Eq, Ord)
@@ -35,12 +36,17 @@ data SplineCoef a = SC { scAlpha  :: !a      -- ^ a
                        }
   deriving Show
 
+-- | 1D Cubic spline
 data Spline a = Spline { splineHead :: !(a, SplineCoef a)
                        , splineTail :: !(M.Map a (SplineCoef a))
                        }
-  deriving Show
 
-runSplineCoef :: Fractional a => a -> SplineCoef a -> a -> a
+runSplineCoef
+    :: Fractional a
+    => a
+    -> SplineCoef a
+    -> a
+    -> a
 runSplineCoef x0 (SC α β γ0 γ1 δ) x = q * γ0
                                     + t * γ1
                                     + t * q * (q * α + t * β)
@@ -48,21 +54,26 @@ runSplineCoef x0 (SC α β γ0 γ1 δ) x = q * γ0
     t = (x - x0) / δ
     q = 1 - t
 
+-- | Sample a spline at a given point.
 sampleSpline
     :: (Fractional a, Ord a)
     => Spline a
     -> a
     -> a
 sampleSpline Spline{..} x = case x `M.lookupLE` splineTail of
-    Nothing -> case splineHead of
-      (x0, sc) -> runSplineCoef x0 sc x
+    Nothing ->
+      let (x0, sc) = splineHead
+      in  runSplineCoef x0 sc x
     Just (x0, sc) -> runSplineCoef x0 sc x
 
--- | <https://en.wikipedia.org/wiki/Spline_interpolation#Interpolation_using_natural_cubic_spline>
+-- | Build a cubic spline based on control points using given end
+-- conditions (not-a-knot, or natural)
+--
+-- <https://en.wikipedia.org/wiki/Spline_interpolation>
 makeSpline
     :: forall a. (Ord a, Fractional a)
     => SplineEnd
-    -> M.Map a a
+    -> M.Map a a            -- ^ (x, y)
     -> Maybe (Spline a)
 makeSpline se ps = do
     (xy0, ps') <- M.minViewWithKey ps

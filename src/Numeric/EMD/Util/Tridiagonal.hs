@@ -76,14 +76,5 @@ solveTridiagonal as bs cs ds = runST $ runMaybeT $ do
         lift $ SMVG.modify mds ((/ dvr) . subtract sbr) i1
       lift $ SVG.freeze mds
 
--- TODO: could be optimized unsafely
 consecFinites :: KnownNat n => [(Finite n, Finite (n + 1))]
-consecFinites = map (\i -> (i, shift i)) finites
-
-    -- ds' :: SVG.Vector v (n + 1) a
-    -- ds' = _
-    -- xs  = _
-
-    -- runST $ do
-    -- cs' <- SVG.thaw cs
-    -- _
+consecFinites = zip finites (tail finites)
