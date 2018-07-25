@@ -9,6 +9,29 @@
 @package emd
 @version 0.1.0.0
 
+module Numeric.Spline
+
+-- | 1D Cubic spline
+data Spline a
+
+-- | End condition for spline
+data SplineEnd
+SENotAKnot :: SplineEnd
+SENatural :: SplineEnd
+
+-- | Build a cubic spline based on control points using given end
+--   conditions (not-a-knot, or natural)
+--   
+--   <a>https://en.wikipedia.org/wiki/Spline_interpolation</a>
+makeSpline :: forall a. (Ord a, Fractional a) => SplineEnd -> Map a a -> Maybe (Spline a)
+
+-- | Sample a spline at a given point.
+sampleSpline :: (Fractional a, Ord a) => Spline a -> a -> a
+instance GHC.Show.Show a => GHC.Show.Show (Numeric.Spline.SplineCoef a)
+instance GHC.Classes.Ord Numeric.Spline.SplineEnd
+instance GHC.Classes.Eq Numeric.Spline.SplineEnd
+instance GHC.Show.Show Numeric.Spline.SplineEnd
+
 module Numeric.EMD
 
 -- | EMD decomposition (Hilbert-Huang Transform) of a given time series
@@ -64,6 +87,11 @@ SCAnd :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
 
 -- | Default <a>SiftCondition</a>
 defaultSC :: Fractional a => SiftCondition a
+
+-- | End condition for spline
+data SplineEnd
+SENotAKnot :: SplineEnd
+SENatural :: SplineEnd
 
 -- | Iterated sifting process.
 sift :: (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (n + 2) a -> SiftResult v (n + 2) a
