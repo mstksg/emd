@@ -34,24 +34,24 @@ import qualified Data.Vector.Generic.Sized         as SVG
 -- 3. Another mystery condition!
 solveTridiagonal
     :: forall v n a. (VG.Vector v a, KnownNat n, Fractional a, Eq a)
-    => SVG.Vector v (n + 1)   a       -- ^ a: Bottom diagonal of M
-    -> SVG.Vector v (n + 2) a       -- ^ b: Main diagonal of M
-    -> SVG.Vector v (n + 1)   a       -- ^ c: Upper diagonal of M
-    -> SVG.Vector v (n + 2) a       -- ^ y
-    -> Maybe (SVG.Vector v (n + 2) a) -- ^ x such that M x = y
+    => SVG.Vector v (n + 1) a           -- ^ a: Bottom diagonal of M
+    -> SVG.Vector v (n + 2) a           -- ^ b: Main diagonal of M
+    -> SVG.Vector v (n + 1) a           -- ^ c: Upper diagonal of M
+    -> SVG.Vector v (n + 2) a           -- ^ y
+    -> Maybe (SVG.Vector v (n + 2) a)   -- ^ x such that M x = y
 solveTridiagonal as bs cs ds = runST $ runMaybeT $ do
     guard $ SVG.head bs /= 0
-    cs' <- MaybeT . pure $ mcs'
-    ds' <- MaybeT . pure $ mds'
-    mxs <- lift $ SVG.thaw ds'
+    cs' <- makeCs
+    mxs <- lift $ SVG.thaw ds
+    makeDs cs' mxs
     forwards . for_ (consecFinites @(n + 1)) $ \(i0, i1) -> Backwards $ do
       x1 <- lift $ SMVG.read mxs i1
       let sbr = cs' `SVG.index` i0 * x1
       lift $ SMVG.modify mxs (subtract sbr) (weaken i0)
     lift $ SVG.freeze mxs
   where
-    mcs' :: Maybe (SVG.Vector v (n + 1) a)
-    mcs' = runST $ runMaybeT $ do
+    makeCs :: MaybeT (ST s) (SVG.Vector v (n + 1) a)
+    makeCs = do
       mcs <- lift $ SVG.thaw cs
       lift $ SMVG.modify mcs (/ SVG.head bs) minBound
       for_ (consecFinites @n) $ \(i0, i1) -> do
@@ -61,10 +61,11 @@ solveTridiagonal as bs cs ds = runST $ runMaybeT $ do
         guard $ dvr /= 0
         lift $ SMVG.modify mcs (/ dvr) i1
       lift $ SVG.freeze mcs
-    mds' :: Maybe (SVG.Vector v (n + 2) a)
-    mds' = runST $ runMaybeT $ do
-      mds <- lift $ SVG.thaw ds
-      cs' <- MaybeT . pure $ mcs'
+    makeDs
+        :: SVG.Vector v (n + 1) a
+        -> SVG.MVector (VG.Mutable v) (n + 2) s a
+        -> MaybeT (ST s) ()
+    makeDs cs' mds = do
       lift $ SMVG.modify mds (/ SVG.head bs) minBound
       for_ (consecFinites @(n + 1)) $ \(i0, i1) -> do
         let c0 = cs' `SVG.index` i0
@@ -74,7 +75,6 @@ solveTridiagonal as bs cs ds = runST $ runMaybeT $ do
                 - as `SVG.index` i0 * c0
         guard $ dvr /= 0
         lift $ SMVG.modify mds ((/ dvr) . subtract sbr) i1
-      lift $ SVG.freeze mds
 
 consecFinites :: KnownNat n => [(Finite n, Finite (n + 1))]
 consecFinites = zip finites (tail finites)
