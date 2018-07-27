@@ -241,3 +241,62 @@ SRResidual :: !(v a) -> SiftResult v a
 -- | number of iterations
 SRIMF :: !(v a) -> !Int -> SiftResult v a
 instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.EMD.Unsized.EMD v a)
+
+module Numeric.HHT
+hhtEmd :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMD v (n + 1) a -> HHT v n a
+hht :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMDOpts a -> Vector v (n + 1) a -> HHT v n a
+newtype HHT v n a
+HHT :: [HHTLine v n a] -> HHT v n a
+[hhtLines] :: HHT v n a -> [HHTLine v n a]
+data HHTLine v n a
+HHTLine :: !(Vector v n a) -> !(Vector v n a) -> HHTLine v n a
+[hlMags] :: HHTLine v n a -> !(Vector v n a)
+[hlFreqs] :: HHTLine v n a -> !(Vector v n a)
+
+-- | Options for EMD composition.
+data EMDOpts a
+EO :: SiftCondition a -> SplineEnd a -> Bool -> EMDOpts a
+
+-- | stop condition for sifting
+[eoSiftCondition] :: EMDOpts a -> SiftCondition a
+
+-- | end conditions for envelope splines
+[eoSplineEnd] :: EMDOpts a -> SplineEnd a
+
+-- | if <a>True</a>, use time series endpoints as part of min and max
+--   envelopes
+[eoClampEnvelope] :: EMDOpts a -> Bool
+
+-- | Default <a>EMDOpts</a>
+defaultEO :: Fractional a => EMDOpts a
+
+-- | Stop conditions for sifting process
+data SiftCondition a
+
+-- | Stop using standard SD method
+SCStdDev :: !a -> SiftCondition a
+
+-- | Stop after a fixed number of sifting iterations
+SCTimes :: !Int -> SiftCondition a
+
+-- | one or the other
+SCOr :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
+
+-- | both conditions met
+SCAnd :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
+
+-- | Default <a>SiftCondition</a>
+defaultSC :: Fractional a => SiftCondition a
+
+-- | End condition for spline
+data SplineEnd a
+SENotAKnot :: SplineEnd a
+SENatural :: SplineEnd a
+SEClamped :: a -> a -> SplineEnd a
+
+-- | Real part is original series and imaginary part is hilbert transformed
+--   series.
+hilbert :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, Floating a) => Vector v n a -> Vector v n (Complex a)
+
+-- | Can be made faster using an FFT and iFFT combo
+hilbert' :: forall v n a. (Vector v a, KnownNat n, Floating a) => Vector v n a -> Vector v n a
