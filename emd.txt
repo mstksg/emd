@@ -110,7 +110,7 @@ defaultEO :: Fractional a => EMDOpts a
 -- | Stop conditions for sifting process
 data SiftCondition a
 
--- | Stop using standard <a>SD</a> method
+-- | Stop using standard SD method
 SCStdDev :: !a -> SiftCondition a
 
 -- | Stop after a fixed number of sifting iterations
@@ -207,7 +207,7 @@ defaultEO :: Fractional a => EMDOpts a
 -- | Stop conditions for sifting process
 data SiftCondition a
 
--- | Stop using standard <a>SD</a> method
+-- | Stop using standard SD method
 SCStdDev :: !a -> SiftCondition a
 
 -- | Stop after a fixed number of sifting iterations
