@@ -72,14 +72,13 @@ data EMDOpts a = EO { eoSiftCondition :: SiftCondition a  -- ^ stop condition fo
 -- | Default 'EMDOpts'
 defaultEO :: Fractional a => EMDOpts a
 defaultEO = EO { eoSiftCondition = defaultSC
-               , eoSplineEnd     = SENotAKnot
-               , eoClampEnvelope = True
+               , eoSplineEnd     = SEClamped 0 0
+               , eoClampEnvelope = False
                }
 
-
 -- | Stop conditions for sifting process
-data SiftCondition a = SCStdDev a         -- ^ Stop using standard "SD" method
-                     | SCTimes Int        -- ^ Stop after a fixed number of iterations
+data SiftCondition a = SCStdDev !a         -- ^ Stop using standard "SD" method
+                     | SCTimes !Int        -- ^ Stop after a fixed number of sifting iterations
                      | SCOr (SiftCondition a) (SiftCondition a)   -- ^ one or the other
                      | SCAnd (SiftCondition a) (SiftCondition a)  -- ^ both conditions met
   deriving (Show, Eq, Ord)
@@ -136,7 +135,7 @@ emdTrace
     -> m (EMD v (n + 1) a)
 emdTrace = emd' $ \case
     SRResidual _ -> liftIO $ putStrLn "Residual found."
-    SRIMF _ i    -> liftIO $ printf "IMF found (%d iterations)\n" i
+    SRIMF _ i    -> liftIO $ printf "IMF found (%d sifts)\n" i
 
 -- | 'emd' with a callback for each found IMF.
 emd'
@@ -156,7 +155,7 @@ emd' cb eo = go id
 -- | The result of a sifting operation.  Each sift either yields
 -- a residual, or a new IMF.
 data SiftResult v n a = SRResidual !(SVG.Vector v n a)
-                      | SRIMF      !(SVG.Vector v n a) !Int   -- ^ number of iterations
+                      | SRIMF      !(SVG.Vector v n a) !Int   -- ^ number of sifting iterations
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
 sift

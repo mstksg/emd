@@ -30,6 +30,7 @@ module Numeric.EMD.Internal.Spline (
   ) where
 
 import           Data.Finite
+import           Data.Maybe
 import           Data.Proxy
 import           Data.Type.Equality
 import           GHC.TypeLits.Compare
@@ -120,11 +121,12 @@ makeSpline se ps = SV.withSizedList (M.toList ps) $ \(xsys :: SV.Vector n (a, a)
             SENotAKnot      -> notAKnot rdxs rdxssq dydxssq
             SENatural       -> natural rdxs dydxssq
             SEClamped c0 c1 -> clamped c0 c1
-      solution <- solveTridiagonal (                    lowerDiag `SV.snoc` eeLower1)
-                                   (eeMain0   `SV.cons` mainDiag  `SV.snoc` eeMain1 )
-                                   (eeUpper0  `SV.cons` upperDiag                   )
-                                   (eeRhs0    `SV.cons` rhs       `SV.snoc` eeRhs1  )
-      let as :: SV.Vector (n - 1) a
+          solution = fromMaybe (errorWithoutStackTrace "Numeric.EMD.Internal.Spline.makeSpline: Splining coefficient matrix is singular") $
+            solveTridiagonal (                    lowerDiag `SV.snoc` eeLower1)
+                             (eeMain0   `SV.cons` mainDiag  `SV.snoc` eeMain1 )
+                             (eeUpper0  `SV.cons` upperDiag                   )
+                             (eeRhs0    `SV.cons` rhs       `SV.snoc` eeRhs1  )
+          as :: SV.Vector (n - 1) a
           as = SV.zipWith3 (\k dx dy -> k * dx - dy) (SV.init solution) dxs dys
           bs :: SV.Vector (n - 1) a
           bs = SV.zipWith3 (\k dx dy -> - k * dx + dy) (SV.tail solution) dxs dys
