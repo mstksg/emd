@@ -245,6 +245,8 @@ instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.EMD.Unsized.EMD v a)
 module Numeric.HHT
 hhtEmd :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMD v (n + 1) a -> HHT v n a
 hht :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMDOpts a -> Vector v (n + 1) a -> HHT v n a
+marginal :: forall v n a. (Vector v a, KnownNat n, Ord a, Num a) => HHT v n a -> Map a a
+instantaneousEnergy :: forall v n a. (Vector v a, KnownNat n, Num a) => HHT v n a -> Vector v n a
 newtype HHT v n a
 HHT :: [HHTLine v n a] -> HHT v n a
 [hhtLines] :: HHT v n a -> [HHTLine v n a]
