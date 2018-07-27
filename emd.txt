@@ -19,22 +19,23 @@ module Numeric.EMD.Internal.Spline
 data Spline a
 
 -- | End condition for spline
-data SplineEnd
-SENotAKnot :: SplineEnd
-SENatural :: SplineEnd
+data SplineEnd a
+SENotAKnot :: SplineEnd a
+SENatural :: SplineEnd a
+SEClamped :: a -> a -> SplineEnd a
 
 -- | Build a cubic spline based on control points using given end
 --   conditions (not-a-knot, or natural)
 --   
 --   <a>https://en.wikipedia.org/wiki/Spline_interpolation</a>
-makeSpline :: forall a. (Ord a, Fractional a) => SplineEnd -> Map a a -> Maybe (Spline a)
+makeSpline :: forall a. (Ord a, Fractional a) => SplineEnd a -> Map a a -> Maybe (Spline a)
 
 -- | Sample a spline at a given point.
 sampleSpline :: (Fractional a, Ord a) => Spline a -> a -> a
 instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.Internal.Spline.SplineCoef a)
-instance GHC.Classes.Ord Numeric.EMD.Internal.Spline.SplineEnd
-instance GHC.Classes.Eq Numeric.EMD.Internal.Spline.SplineEnd
-instance GHC.Show.Show Numeric.EMD.Internal.Spline.SplineEnd
+instance GHC.Classes.Ord a => GHC.Classes.Ord (Numeric.EMD.Internal.Spline.SplineEnd a)
+instance GHC.Classes.Eq a => GHC.Classes.Eq (Numeric.EMD.Internal.Spline.SplineEnd a)
+instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.Internal.Spline.SplineEnd a)
 
 
 -- | Empirical Mode Decomposition (Hilbert-Huang Transform) in pure
@@ -91,13 +92,13 @@ EMD :: ![Vector v n a] -> !(Vector v n a) -> EMD v n a
 
 -- | Options for EMD composition.
 data EMDOpts a
-EO :: SiftCondition a -> SplineEnd -> Bool -> EMDOpts a
+EO :: SiftCondition a -> SplineEnd a -> Bool -> EMDOpts a
 
 -- | stop condition for sifting
 [eoSiftCondition] :: EMDOpts a -> SiftCondition a
 
 -- | end conditions for envelope splines
-[eoSplineEnd] :: EMDOpts a -> SplineEnd
+[eoSplineEnd] :: EMDOpts a -> SplineEnd a
 
 -- | if <a>True</a>, use time series endpoints as part of min and max
 --   envelopes
@@ -110,24 +111,25 @@ defaultEO :: Fractional a => EMDOpts a
 data SiftCondition a
 
 -- | Stop using standard <a>SD</a> method
-SCStdDev :: a -> SiftCondition a
+SCStdDev :: !a -> SiftCondition a
 
--- | Stop after a fixed number of iterations
-SCTimes :: Int -> SiftCondition a
+-- | Stop after a fixed number of sifting iterations
+SCTimes :: !Int -> SiftCondition a
 
 -- | one or the other
-SCOr :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
+SCOr :: !(SiftCondition a) -> !(SiftCondition a) -> SiftCondition a
 
 -- | both conditions met
-SCAnd :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
+SCAnd :: !(SiftCondition a) -> !(SiftCondition a) -> SiftCondition a
 
 -- | Default <a>SiftCondition</a>
 defaultSC :: Fractional a => SiftCondition a
 
 -- | End condition for spline
-data SplineEnd
-SENotAKnot :: SplineEnd
-SENatural :: SplineEnd
+data SplineEnd a
+SENotAKnot :: SplineEnd a
+SENatural :: SplineEnd a
+SEClamped :: a -> a -> SplineEnd a
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
 sift :: (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (n + 1) a -> SiftResult v (n + 1) a
@@ -137,13 +139,13 @@ sift :: (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (
 data SiftResult v n a
 SRResidual :: !(Vector v n a) -> SiftResult v n a
 
--- | number of iterations
+-- | number of sifting iterations
 SRIMF :: !(Vector v n a) -> !Int -> SiftResult v n a
 
 -- | Returns cubic splines of local minimums and maximums. Returns
 --   <a>Nothing</a> if there are not enough local minimum or maximums to
 --   create the splines.
-envelopes :: (Vector v a, KnownNat n, Fractional a, Ord a) => SplineEnd -> Bool -> Vector v (n + 1) a -> Maybe (Vector v (n + 1) a, Vector v (n + 1) a)
+envelopes :: (Vector v a, KnownNat n, Fractional a, Ord a) => SplineEnd a -> Bool -> Vector v (n + 1) a -> Maybe (Vector v (n + 1) a, Vector v (n + 1) a)
 instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.EMD.EMD v n a)
 instance GHC.Classes.Ord a => GHC.Classes.Ord (Numeric.EMD.EMDOpts a)
 instance GHC.Classes.Eq a => GHC.Classes.Eq (Numeric.EMD.EMDOpts a)
@@ -187,13 +189,13 @@ EMD :: ![v a] -> !(v a) -> EMD v a
 
 -- | Options for EMD composition.
 data EMDOpts a
-EO :: SiftCondition a -> SplineEnd -> Bool -> EMDOpts a
+EO :: SiftCondition a -> SplineEnd a -> Bool -> EMDOpts a
 
 -- | stop condition for sifting
 [eoSiftCondition] :: EMDOpts a -> SiftCondition a
 
 -- | end conditions for envelope splines
-[eoSplineEnd] :: EMDOpts a -> SplineEnd
+[eoSplineEnd] :: EMDOpts a -> SplineEnd a
 
 -- | if <a>True</a>, use time series endpoints as part of min and max
 --   envelopes
@@ -206,24 +208,25 @@ defaultEO :: Fractional a => EMDOpts a
 data SiftCondition a
 
 -- | Stop using standard <a>SD</a> method
-SCStdDev :: a -> SiftCondition a
+SCStdDev :: !a -> SiftCondition a
 
--- | Stop after a fixed number of iterations
-SCTimes :: Int -> SiftCondition a
+-- | Stop after a fixed number of sifting iterations
+SCTimes :: !Int -> SiftCondition a
 
 -- | one or the other
-SCOr :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
+SCOr :: !(SiftCondition a) -> !(SiftCondition a) -> SiftCondition a
 
 -- | both conditions met
-SCAnd :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
+SCAnd :: !(SiftCondition a) -> !(SiftCondition a) -> SiftCondition a
 
 -- | Default <a>SiftCondition</a>
 defaultSC :: Fractional a => SiftCondition a
 
 -- | End condition for spline
-data SplineEnd
-SENotAKnot :: SplineEnd
-SENatural :: SplineEnd
+data SplineEnd a
+SENotAKnot :: SplineEnd a
+SENatural :: SplineEnd a
+SEClamped :: a -> a -> SplineEnd a
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
 --   
