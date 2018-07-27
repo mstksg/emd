@@ -77,7 +77,7 @@ defaultEO = EO { eoSiftCondition = defaultSC
                }
 
 -- | Stop conditions for sifting process
-data SiftCondition a = SCStdDev !a         -- ^ Stop using standard "SD" method
+data SiftCondition a = SCStdDev !a         -- ^ Stop using standard SD method
                      | SCTimes !Int        -- ^ Stop after a fixed number of sifting iterations
                      | SCOr (SiftCondition a) (SiftCondition a)   -- ^ one or the other
                      | SCAnd (SiftCondition a) (SiftCondition a)  -- ^ both conditions met
@@ -95,14 +95,14 @@ testCondition
     -> SVG.Vector v n a
     -> SVG.Vector v n a
     -> Bool
-testCondition = \case
-    SCStdDev t -> \_ v v' ->
-      let sd = SVG.sum $ SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v'
-      in  sd <= t
-    SCTimes l  -> \i _ _ -> i >= l
-    SCOr  f g -> \i v v' -> testCondition f i v v' || testCondition g i v v'
-    SCAnd f g -> \i v v' -> testCondition f i v v' && testCondition g i v v'
+testCondition tc i v v' = go tc
   where
+    sd = SVG.sum $ SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v'
+    go = \case
+      SCStdDev t -> sd <= t
+      SCTimes l  -> i >= l
+      SCOr  f g  -> go f || go g
+      SCAnd f g  -> go f && go g
     eps = 0.0000001
 
 -- | An @'EMD' v n a@ is a Hilbert-Huang transform of a time series with
