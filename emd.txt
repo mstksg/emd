@@ -117,10 +117,10 @@ SCStdDev :: !a -> SiftCondition a
 SCTimes :: !Int -> SiftCondition a
 
 -- | one or the other
-SCOr :: !(SiftCondition a) -> !(SiftCondition a) -> SiftCondition a
+SCOr :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
 
 -- | both conditions met
-SCAnd :: !(SiftCondition a) -> !(SiftCondition a) -> SiftCondition a
+SCAnd :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
 
 -- | Default <a>SiftCondition</a>
 defaultSC :: Fractional a => SiftCondition a
@@ -214,10 +214,10 @@ SCStdDev :: !a -> SiftCondition a
 SCTimes :: !Int -> SiftCondition a
 
 -- | one or the other
-SCOr :: !(SiftCondition a) -> !(SiftCondition a) -> SiftCondition a
+SCOr :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
 
 -- | both conditions met
-SCAnd :: !(SiftCondition a) -> !(SiftCondition a) -> SiftCondition a
+SCAnd :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
 
 -- | Default <a>SiftCondition</a>
 defaultSC :: Fractional a => SiftCondition a
