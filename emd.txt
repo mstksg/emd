@@ -101,10 +101,17 @@ EO :: SiftCondition a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts a
 [eoSplineEnd] :: EMDOpts a -> SplineEnd a
 
 -- | process for handling boundary
-[eoClampEnvelope] :: EMDOpts a -> Maybe BoundaryHandler
+[eoBoundaryHandler] :: EMDOpts a -> Maybe BoundaryHandler
 
 -- | Default <a>EMDOpts</a>
 defaultEO :: Fractional a => EMDOpts a
+data BoundaryHandler
+
+-- | Clamp envelope at end points (Matlab implementation)
+BHClamp :: BoundaryHandler
+
+-- | Extend boundaries symmetrically
+BHSymmetric :: BoundaryHandler
 
 -- | Stop conditions for sifting process
 data SiftCondition a
@@ -200,10 +207,17 @@ EO :: SiftCondition a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts a
 [eoSplineEnd] :: EMDOpts a -> SplineEnd a
 
 -- | process for handling boundary
-[eoClampEnvelope] :: EMDOpts a -> Maybe BoundaryHandler
+[eoBoundaryHandler] :: EMDOpts a -> Maybe BoundaryHandler
 
 -- | Default <a>EMDOpts</a>
 defaultEO :: Fractional a => EMDOpts a
+data BoundaryHandler
+
+-- | Clamp envelope at end points (Matlab implementation)
+BHClamp :: BoundaryHandler
+
+-- | Extend boundaries symmetrically
+BHSymmetric :: BoundaryHandler
 
 -- | Stop conditions for sifting process
 data SiftCondition a
@@ -267,10 +281,17 @@ EO :: SiftCondition a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts a
 [eoSplineEnd] :: EMDOpts a -> SplineEnd a
 
 -- | process for handling boundary
-[eoClampEnvelope] :: EMDOpts a -> Maybe BoundaryHandler
+[eoBoundaryHandler] :: EMDOpts a -> Maybe BoundaryHandler
 
 -- | Default <a>EMDOpts</a>
 defaultEO :: Fractional a => EMDOpts a
+data BoundaryHandler
+
+-- | Clamp envelope at end points (Matlab implementation)
+BHClamp :: BoundaryHandler
+
+-- | Extend boundaries symmetrically
+BHSymmetric :: BoundaryHandler
 
 -- | Stop conditions for sifting process
 data SiftCondition a
