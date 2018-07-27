@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase                               #-}
 {-# LANGUAGE RecordWildCards                          #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}
+{-# LANGUAGE TypeApplications                         #-}
 {-# LANGUAGE TypeInType                               #-}
 {-# LANGUAGE TypeOperators                            #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
@@ -51,6 +52,7 @@ module Numeric.EMD (
   , envelopes
   ) where
 
+import           Control.Monad
 import           Control.Monad.IO.Class
 import           Data.Finite
 import           Data.Functor.Identity
@@ -65,26 +67,41 @@ import qualified Data.Vector.Generic.Sized    as SVG
 -- | Options for EMD composition.
 data EMDOpts a = EO { eoSiftCondition :: SiftCondition a  -- ^ stop condition for sifting
                     , eoSplineEnd     :: SplineEnd a      -- ^ end conditions for envelope splines
-                    , eoClampEnvelope :: Bool             -- ^ if 'True', use time series endpoints as part of min and max envelopes
+                    , eoClampEnvelope :: Maybe BoundaryHandler  -- ^ process for handling boundary
                     }
   deriving (Show, Eq, Ord)
+
+data BoundaryHandler
+    -- | Clamp envelope at end points (Matlab implementation)
+    = BHClamp
+    -- | Extend boundaries symmetrically
+    | BHSymmetric
+  deriving (Show, Eq, Ord)
+    -- -- | Extend boundaries assuming global periodicity
+    -- | BHPeriodic
 
 -- | Default 'EMDOpts'
 defaultEO :: Fractional a => EMDOpts a
 defaultEO = EO { eoSiftCondition = defaultSC
-               , eoSplineEnd     = SEClamped 0 0
-               , eoClampEnvelope = False
+               , eoSplineEnd     = SENatural
+               , eoClampEnvelope = Just BHSymmetric
                }
 
 -- | Stop conditions for sifting process
-data SiftCondition a = SCStdDev !a         -- ^ Stop using standard SD method
-                     | SCTimes !Int        -- ^ Stop after a fixed number of sifting iterations
-                     | SCOr (SiftCondition a) (SiftCondition a)   -- ^ one or the other
-                     | SCAnd (SiftCondition a) (SiftCondition a)  -- ^ both conditions met
+data SiftCondition a
+    -- | Stop using standard SD method
+    = SCStdDev !a
+    -- | Stop after a fixed number of sifting iterations
+    | SCTimes !Int
+    -- | One or the other
+    | SCOr (SiftCondition a) (SiftCondition a)
+    -- | Stop when both conditions are met
+    | SCAnd (SiftCondition a) (SiftCondition a)
   deriving (Show, Eq, Ord)
 
 -- | Default 'SiftCondition'
 defaultSC :: Fractional a => SiftCondition a
+-- defaultSC = SCStdDev 0.3 `SCOr` SCTimes 20
 defaultSC = SCStdDev 0.3
 
 -- | 'True' if stop
@@ -175,10 +192,10 @@ sift EO{..} = go 1
 sift'
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => SplineEnd a
-    -> Bool
+    -> Maybe BoundaryHandler
     -> SVG.Vector v (n + 1) a
     -> Maybe (SVG.Vector v (n + 1) a)
-sift' se cl v = go <$> envelopes se cl v
+sift' se bh v = go <$> envelopes se bh v
   where
     go (mins, maxs) = SVG.zipWith3 (\x mi ma -> x - (mi + ma)/2) v mins maxs
 
@@ -188,24 +205,80 @@ sift' se cl v = go <$> envelopes se cl v
 envelopes
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => SplineEnd a
-    -> Bool
+    -> Maybe BoundaryHandler
     -> SVG.Vector v (n + 1) a
     -> Maybe (SVG.Vector v (n + 1) a, SVG.Vector v (n + 1) a)
-envelopes se cl xs = (,) <$> splineAgainst se mins'
-                         <*> splineAgainst se maxs'
+envelopes se bh xs = do
+    when (bh == Just BHClamp) $ do
+      guard (M.size mins > 1)
+      guard (M.size maxs > 1)
+    (,) <$> splineAgainst se emin mins
+        <*> splineAgainst se emax maxs
   where
-    minMax = M.fromList [(minBound, SVG.head xs), (maxBound, SVG.last xs)]
+    -- minMax = M.fromList [(minBound, SVG.head xs), (maxBound, SVG.last xs)]
     (mins,maxs) = extrema xs
-    (mins', maxs')
-      | cl        = (mins `M.union` minMax, maxs `M.union` minMax)
-      | otherwise = (mins, maxs)
+    (emin,emax) = case bh of
+      Nothing  -> mempty
+      Just bh' -> extendExtrema xs bh' (mins,maxs)
+    --   | isJust bh = (mins `M.union` minMax, maxs `M.union` minMax)
+    --   | otherwise = (mins, maxs)
+
+extendExtrema
+    :: forall v n a. (VG.Vector v a, KnownNat n)
+    => SVG.Vector v (n + 1) a
+    -> BoundaryHandler
+    -> (M.Map (Finite (n + 1)) a, M.Map (Finite (n + 1)) a)
+    -> (M.Map Int a, M.Map Int a)
+    -- (M.Map (Finite (n + 1)) a, M.Map (Finite (n + 1)) a)
+extendExtrema xs = \case
+    BHClamp     -> const (firstLast, firstLast)
+    BHSymmetric -> \(mins, maxs) ->
+      let addFirst = case (flippedMin, flippedMax) of
+              (Nothing      , Nothing      ) -> mempty
+              -- first point is local maximum
+              (Just (_,mn)  , Nothing      ) -> (mn        , firstPoint)
+              -- first point is local minimum
+              (Nothing      , Just (_,mx)  ) -> (firstPoint, mx        )
+              (Just (mni,mn), Just (mxi,mx))
+                | mni < mxi                  -> (mn        , firstPoint)
+                | otherwise                  -> (firstPoint, mx        )
+            where
+              flippedMin = flip fmap (M.lookupMin mins) $ \(minIx, minVal) ->
+                (minIx, M.singleton (negate (fromIntegral minIx)) minVal)
+              flippedMax = flip fmap (M.lookupMin maxs) $ \(maxIx, maxVal) ->
+                (maxIx, M.singleton (negate (fromIntegral maxIx)) maxVal)
+          addLast = case (flippedMin, flippedMax) of
+              (Nothing      , Nothing      ) -> mempty
+              -- last point is local maximum
+              (Just (_,mn)  , Nothing      ) -> (mn        , lastPoint )
+              -- last point is local minimum
+              (Nothing      , Just (_,mx)  ) -> (lastPoint , mx        )
+              (Just (mni,mn), Just (mxi,mx))
+                | mni > mxi                  -> (mn        , lastPoint )
+                | otherwise                  -> (lastPoint , mx        )
+            where
+              flippedMin = flip fmap (M.lookupMax mins) $ \(minIx, minVal) ->
+                (minIx, M.singleton (extendSym (fromIntegral minIx)) minVal)
+              flippedMax = flip fmap (M.lookupMax maxs) $ \(maxIx, maxVal) ->
+                (maxIx, M.singleton (extendSym (fromIntegral maxIx)) maxVal)
+      in  addFirst <> addLast
+  where
+    lastIx = fromIntegral $ maxBound @(Finite n)
+    firstPoint = M.singleton 0 (SVG.head xs)
+    lastPoint  = M.singleton lastIx (SVG.last xs)
+    firstLast  = firstPoint <> lastPoint
+    extendSym i = 2 * lastIx - i
 
 -- | Build a splined vector against a map of control points.
 splineAgainst
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => SplineEnd a
+    -> M.Map Int a              -- ^ extensions
     -> M.Map (Finite n) a
     -> Maybe (SVG.Vector v n a)
-splineAgainst se = fmap go . makeSpline se . M.mapKeysMonotonic fromIntegral
+splineAgainst se ext = fmap go
+                     . makeSpline se
+                     . mappend (M.mapKeysMonotonic fromIntegral ext)
+                     . M.mapKeysMonotonic fromIntegral
   where
     go spline = SVG.generate (sampleSpline spline . fromIntegral)

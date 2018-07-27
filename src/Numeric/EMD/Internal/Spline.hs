@@ -121,6 +121,7 @@ makeSpline se ps = SV.withSizedList (M.toList ps) $ \(xsys :: SV.Vector n (a, a)
             SENotAKnot      -> notAKnot rdxs rdxssq dydxssq
             SENatural       -> natural rdxs dydxssq
             SEClamped c0 c1 -> clamped c0 c1
+            -- TODO: perterb if singular
           solution = fromMaybe (errorWithoutStackTrace "Numeric.EMD.Internal.Spline.makeSpline: Splining coefficient matrix is singular") $
             solveTridiagonal (                    lowerDiag `SV.snoc` eeLower1)
                              (eeMain0   `SV.cons` mainDiag  `SV.snoc` eeMain1 )

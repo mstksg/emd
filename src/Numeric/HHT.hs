@@ -78,8 +78,9 @@ hilbertMagFreq v = (hilbertMag, hilbertFreq)
     hilbertPhase = SVG.zipWith (\x x' -> phase (x :+ x')) v v'
     hilbertFreq  = SVG.map wrap $ SVG.tail hilbertPhase - SVG.init hilbertPhase
     -- TODO: fix
-    wrap         = (`mod'` (2 * pi))
-    -- wrap         = subtract pi . (`mod'` (2 * pi)) . (+ pi)
+    -- problem might be in end swings
+    -- wrap         = (`mod'` (2 * pi))
+    wrap         = subtract pi . (`mod'` (2 * pi)) . (+ pi)
 
 -- | Real part is original series and imaginary part is hilbert transformed
 -- series.
