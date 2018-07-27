@@ -46,7 +46,7 @@ module Numeric.EMD (
   , emdTrace
   , emd'
   , EMD(..)
-  , EMDOpts(..), defaultEO, SiftCondition(..), defaultSC, SplineEnd(..)
+  , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
   -- * Internal
   , sift, SiftResult(..)
   , envelopes
@@ -65,9 +65,9 @@ import qualified Data.Vector.Generic          as VG
 import qualified Data.Vector.Generic.Sized    as SVG
 
 -- | Options for EMD composition.
-data EMDOpts a = EO { eoSiftCondition :: SiftCondition a  -- ^ stop condition for sifting
-                    , eoSplineEnd     :: SplineEnd a      -- ^ end conditions for envelope splines
-                    , eoClampEnvelope :: Maybe BoundaryHandler  -- ^ process for handling boundary
+data EMDOpts a = EO { eoSiftCondition   :: SiftCondition a  -- ^ stop condition for sifting
+                    , eoSplineEnd       :: SplineEnd a      -- ^ end conditions for envelope splines
+                    , eoBoundaryHandler :: Maybe BoundaryHandler  -- ^ process for handling boundary
                     }
   deriving (Show, Eq, Ord)
 
@@ -77,14 +77,15 @@ data BoundaryHandler
     -- | Extend boundaries symmetrically
     | BHSymmetric
   deriving (Show, Eq, Ord)
+
     -- -- | Extend boundaries assuming global periodicity
-    -- | BHPeriodic
+    -- -- | BHPeriodic
 
 -- | Default 'EMDOpts'
 defaultEO :: Fractional a => EMDOpts a
-defaultEO = EO { eoSiftCondition = defaultSC
-               , eoSplineEnd     = SENatural
-               , eoClampEnvelope = Just BHSymmetric
+defaultEO = EO { eoSiftCondition   = defaultSC
+               , eoSplineEnd       = SENatural
+               , eoBoundaryHandler = Just BHSymmetric
                }
 
 -- | Stop conditions for sifting process
@@ -182,7 +183,7 @@ sift
     -> SiftResult v (n + 1) a
 sift EO{..} = go 1
   where
-    go !i !v = case sift' eoSplineEnd eoClampEnvelope v of
+    go !i !v = case sift' eoSplineEnd eoBoundaryHandler v of
       Nothing -> SRResidual v
       Just !v'
         | testCondition eoSiftCondition i v v' -> SRIMF v' i

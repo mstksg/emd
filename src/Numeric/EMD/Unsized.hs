@@ -28,7 +28,7 @@ module Numeric.EMD.Unsized (
   , emdTrace
   , emd'
   , EMD(..)
-  , E.EMDOpts(..), E.defaultEO, E.SiftCondition(..), E.defaultSC, E.SplineEnd(..)
+  , E.EMDOpts(..), E.defaultEO, E.BoundaryHandler(..), E.SiftCondition(..), E.defaultSC, E.SplineEnd(..)
   -- -- * Internal
   , sift, SiftResult(..)
   -- , envelopes

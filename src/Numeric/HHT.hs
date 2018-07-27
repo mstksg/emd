@@ -12,7 +12,7 @@ module Numeric.HHT (
   , hht
   , marginal, instantaneousEnergy
   , HHT(..), HHTLine(..)
-  , EMDOpts(..), defaultEO, SiftCondition(..), defaultSC, SplineEnd(..)
+  , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
   -- * Hilbert transforms (internal usage)
   , hilbert
   , hilbert'
