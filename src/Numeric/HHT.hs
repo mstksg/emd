@@ -10,6 +10,7 @@
 module Numeric.HHT (
     hhtEmd
   , hht
+  , marginal, instantaneousEnergy
   , HHT(..), HHTLine(..)
   , EMDOpts(..), defaultEO, SiftCondition(..), defaultSC, SplineEnd(..)
   -- * Hilbert transforms (internal usage)
@@ -23,6 +24,7 @@ import           Data.Fixed
 import           Data.Semigroup
 import           GHC.TypeNats
 import           Numeric.EMD
+import qualified Data.Map                  as M
 import qualified Data.Vector.Generic       as VG
 import qualified Data.Vector.Generic.Sized as SVG
 
@@ -32,6 +34,22 @@ data HHTLine v n a = HHTLine { hlMags  :: !(SVG.Vector v n a)
                              }
 
 newtype HHT v n a = HHT { hhtLines :: [HHTLine v n a] }
+
+marginal
+    :: forall v n a. (VG.Vector v a, KnownNat n, Ord a, Num a)
+    => HHT v n a
+    -> M.Map a a
+marginal = M.unionsWith (+) . concatMap go . hhtLines
+  where
+    go :: HHTLine v n a -> [M.Map a a]
+    go HHTLine{..} = flip fmap (finites @n) $ \i ->
+      M.singleton (hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
+
+instantaneousEnergy
+    :: forall v n a. (VG.Vector v a, KnownNat n, Num a)
+    => HHT v n a
+    -> SVG.Vector v n a
+instantaneousEnergy = sum . map (SVG.map (^ (2 :: Int)) . hlMags) . hhtLines
 
 hht :: forall v n a. (VG.Vector v a, KnownNat n, RealFloat a)
     => EMDOpts a
@@ -59,7 +77,9 @@ hilbertMagFreq v = (hilbertMag, hilbertFreq)
     hilbertMag   = SVG.zipWith (\x x' -> magnitude (x :+ x')) v v'
     hilbertPhase = SVG.zipWith (\x x' -> phase (x :+ x')) v v'
     hilbertFreq  = SVG.map wrap $ SVG.tail hilbertPhase - SVG.init hilbertPhase
-    wrap          = subtract pi . (`mod'` (2 * pi)) . (+ pi)
+    -- TODO: fix
+    wrap         = (`mod'` (2 * pi))
+    -- wrap         = subtract pi . (`mod'` (2 * pi)) . (+ pi)
 
 -- | Real part is original series and imaginary part is hilbert transformed
 -- series.
