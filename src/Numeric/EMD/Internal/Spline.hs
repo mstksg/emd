@@ -39,8 +39,9 @@ import qualified Data.Map                         as M
 import qualified Data.Vector.Sized                as SV
 
 -- | End condition for spline
-data SplineEnd = SENotAKnot
-               | SENatural
+data SplineEnd a = SENotAKnot
+                 | SENatural
+                 | SEClamped a a
   deriving (Show, Eq, Ord)
 
 data SplineCoef a = SC { _scAlpha  :: !a      -- ^ a
@@ -87,7 +88,7 @@ sampleSpline Spline{..} x = case x `M.lookupLE` splineTail of
 -- <https://en.wikipedia.org/wiki/Spline_interpolation>
 makeSpline
     :: forall a. (Ord a, Fractional a)
-    => SplineEnd
+    => SplineEnd a
     -> M.Map a a            -- ^ (x, y)
     -> Maybe (Spline a)
 makeSpline se ps = SV.withSizedList (M.toList ps) $ \(xsys :: SV.Vector n (a, a)) -> do
@@ -116,8 +117,9 @@ makeSpline se ps = SV.withSizedList (M.toList ps) $ \(xsys :: SV.Vector n (a, a)
                         (SV.init dydxssq)
                         (SV.tail dydxssq)
           EE{..} = case se of
-            SENotAKnot -> notAKnot rdxs rdxssq dydxssq
-            SENatural  -> natural rdxs dydxssq
+            SENotAKnot      -> notAKnot rdxs rdxssq dydxssq
+            SENatural       -> natural rdxs dydxssq
+            SEClamped c0 c1 -> clamped c0 c1
       solution <- solveTridiagonal (                    lowerDiag `SV.snoc` eeLower1)
                                    (eeMain0   `SV.cons` mainDiag  `SV.snoc` eeMain1 )
                                    (eeUpper0  `SV.cons` upperDiag                   )
@@ -182,3 +184,17 @@ notAKnot rdxs rdxssq dydxssq = EE
   where
     rdx12Upper = rdxs `SV.index` minBound * rdxs `SV.index` shift minBound
     rdx12Lower = rdxs `SV.index` maxBound * rdxs `SV.index` weaken maxBound
+
+clamped
+    :: Num a
+    => a            -- ^ derivative at left end
+    -> a            -- ^ derivative at right end
+    -> EndEqn a
+clamped c0 c1 = EE
+    { eeMain0  = 1
+    , eeUpper0 = 0
+    , eeLower1 = 0
+    , eeMain1  = 1
+    , eeRhs0   = c0
+    , eeRhs1   = c1
+    }

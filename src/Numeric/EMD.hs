@@ -64,7 +64,7 @@ import qualified Data.Vector.Generic.Sized    as SVG
 
 -- | Options for EMD composition.
 data EMDOpts a = EO { eoSiftCondition :: SiftCondition a  -- ^ stop condition for sifting
-                    , eoSplineEnd     :: SplineEnd        -- ^ end conditions for envelope splines
+                    , eoSplineEnd     :: SplineEnd a      -- ^ end conditions for envelope splines
                     , eoClampEnvelope :: Bool             -- ^ if 'True', use time series endpoints as part of min and max envelopes
                     }
   deriving (Show, Eq, Ord)
@@ -175,7 +175,7 @@ sift EO{..} = go 1
 -- | Single sift
 sift'
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
-    => SplineEnd
+    => SplineEnd a
     -> Bool
     -> SVG.Vector v (n + 1) a
     -> Maybe (SVG.Vector v (n + 1) a)
@@ -188,7 +188,7 @@ sift' se cl v = go <$> envelopes se cl v
 -- the splines.
 envelopes
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
-    => SplineEnd
+    => SplineEnd a
     -> Bool
     -> SVG.Vector v (n + 1) a
     -> Maybe (SVG.Vector v (n + 1) a, SVG.Vector v (n + 1) a)
@@ -204,7 +204,7 @@ envelopes se cl xs = (,) <$> splineAgainst se mins'
 -- | Build a splined vector against a map of control points.
 splineAgainst
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
-    => SplineEnd
+    => SplineEnd a
     -> M.Map (Finite n) a
     -> Maybe (SVG.Vector v n a)
 splineAgainst se = fmap go . makeSpline se . M.mapKeysMonotonic fromIntegral
