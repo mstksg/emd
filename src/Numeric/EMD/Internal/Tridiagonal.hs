@@ -17,6 +17,7 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Maybe
 import           Data.Finite
 import           Data.Foldable
+import           Debug.Trace
 import           GHC.TypeNats
 import qualified Data.Vector.Generic               as VG
 import qualified Data.Vector.Generic.Mutable.Sized as SMVG
@@ -33,13 +34,13 @@ import qualified Data.Vector.Generic.Sized         as SVG
 -- a row above it
 -- 3. Another mystery condition!
 solveTridiagonal
-    :: forall v n a. (VG.Vector v a, KnownNat n, Fractional a, Eq a)
+    :: forall v n a. (VG.Vector v a, KnownNat n, Fractional a, Eq a, Show (v a), Show a)
     => SVG.Vector v (n + 1) a           -- ^ a: Bottom diagonal of M
     -> SVG.Vector v (n + 2) a           -- ^ b: Main diagonal of M
     -> SVG.Vector v (n + 1) a           -- ^ c: Upper diagonal of M
     -> SVG.Vector v (n + 2) a           -- ^ y
     -> Maybe (SVG.Vector v (n + 2) a)   -- ^ x such that M x = y
-solveTridiagonal as bs cs ds = runST $ runMaybeT $ do
+solveTridiagonal as bs cs ds = logNothing $ runST $ runMaybeT $ do
     guard $ SVG.head bs /= 0
     cs' <- makeCs
     mxs <- lift $ SVG.thaw ds
@@ -73,8 +74,13 @@ solveTridiagonal as bs cs ds = runST $ runMaybeT $ do
         let sbr = as `SVG.index` i0 * d0
             dvr = bs `SVG.index` i1
                 - as `SVG.index` i0 * c0
-        guard $ dvr /= 0
+        if dvr == 0
+          then traceShow (i0,i1,bs `SVG.index` i1, as `SVG.index` i0, c0, sbr) mzero
+          else pure ()
+        -- guard $ dvr /= 0            -- this is the problem
         lift $ SMVG.modify mds ((/ dvr) . subtract sbr) i1
+    logNothing Nothing  = traceShow (as,bs,cs,ds) Nothing
+    logNothing (Just x) = Just x
 
 consecFinites :: KnownNat n => [(Finite n, Finite (n + 1))]
 consecFinites = zip finites (tail finites)

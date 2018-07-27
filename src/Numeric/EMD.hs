@@ -54,6 +54,7 @@ module Numeric.EMD (
 import           Control.Monad.IO.Class
 import           Data.Finite
 import           Data.Functor.Identity
+import           Debug.Trace
 import           GHC.TypeNats
 import           Numeric.EMD.Internal.Extrema
 import           Numeric.EMD.Internal.Spline
@@ -79,7 +80,7 @@ defaultEO = EO { eoSiftCondition = defaultSC
 
 -- | Stop conditions for sifting process
 data SiftCondition a = SCStdDev a         -- ^ Stop using standard "SD" method
-                     | SCTimes Int        -- ^ Stop after a fixed number of iterations
+                     | SCTimes Int        -- ^ Stop after a fixed number of sifting iterations
                      | SCOr (SiftCondition a) (SiftCondition a)   -- ^ one or the other
                      | SCAnd (SiftCondition a) (SiftCondition a)  -- ^ both conditions met
   deriving (Show, Eq, Ord)
@@ -121,7 +122,7 @@ data EMD v n a = EMD { emdIMFs     :: ![SVG.Vector v n a]
 -- 1.  The resulting 'EMD' contains IMFs that are all the same length as
 --     the input vector
 -- 2.  We provide a vector of size of at least one.
-emd :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+emd :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, Show a)
     => EMDOpts a
     -> SVG.Vector v (n + 1) a
     -> EMD v (n + 1) a
@@ -130,17 +131,17 @@ emd eo = runIdentity . emd' (const (pure ())) eo
 -- | 'emd', but tracing results to stdout as IMFs are found.  Useful for
 -- debugging to see how long each step is taking.
 emdTrace
-    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m)
+    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m, Show a)
     => EMDOpts a
     -> SVG.Vector v (n + 1) a
     -> m (EMD v (n + 1) a)
 emdTrace = emd' $ \case
     SRResidual _ -> liftIO $ putStrLn "Residual found."
-    SRIMF _ i    -> liftIO $ printf "IMF found (%d iterations)\n" i
+    SRIMF _ i    -> liftIO $ printf "IMF found (%d sifts)\n" i
 
 -- | 'emd' with a callback for each found IMF.
 emd'
-    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, Applicative m)
+    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, Applicative m, Show a)
     => (SiftResult v (n + 1) a -> m r)
     -> EMDOpts a
     -> SVG.Vector v (n + 1) a
@@ -156,11 +157,11 @@ emd' cb eo = go id
 -- | The result of a sifting operation.  Each sift either yields
 -- a residual, or a new IMF.
 data SiftResult v n a = SRResidual !(SVG.Vector v n a)
-                      | SRIMF      !(SVG.Vector v n a) !Int   -- ^ number of iterations
+                      | SRIMF      !(SVG.Vector v n a) !Int   -- ^ number of sifts
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
 sift
-    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, Show a)
     => EMDOpts a
     -> SVG.Vector v (n + 1) a
     -> SiftResult v (n + 1) a
@@ -174,7 +175,7 @@ sift EO{..} = go 1
 
 -- | Single sift
 sift'
-    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, Show a)
     => SplineEnd a
     -> Bool
     -> SVG.Vector v (n + 1) a
@@ -187,7 +188,7 @@ sift' se cl v = go <$> envelopes se cl v
 -- 'Nothing' if there are not enough local minimum or maximums to create
 -- the splines.
 envelopes
-    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, Show a)
     => SplineEnd a
     -> Bool
     -> SVG.Vector v (n + 1) a
@@ -203,10 +204,13 @@ envelopes se cl xs = (,) <$> splineAgainst se mins'
 
 -- | Build a splined vector against a map of control points.
 splineAgainst
-    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, Show a)
     => SplineEnd a
     -> M.Map (Finite n) a
     -> Maybe (SVG.Vector v n a)
-splineAgainst se = fmap go . makeSpline se . M.mapKeysMonotonic fromIntegral
+splineAgainst se = fmap go
+                 . either (\e -> traceShow e Nothing) Just
+                 . makeSpline se
+                 . M.mapKeysMonotonic fromIntegral
   where
     go spline = SVG.generate (sampleSpline spline . fromIntegral)

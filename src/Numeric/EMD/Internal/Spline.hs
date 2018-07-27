@@ -27,6 +27,7 @@ module Numeric.EMD.Internal.Spline (
     Spline, SplineEnd(..)
   , makeSpline
   , sampleSpline
+  , SplineError(..)
   ) where
 
 import           Data.Finite
@@ -82,18 +83,22 @@ sampleSpline Spline{..} x = case x `M.lookupLE` splineTail of
       in  runSplineCoef x0 sc x
     Just (x0, sc) -> runSplineCoef x0 sc x
 
+data SplineError = SETooSmall
+                 | SENoSolve
+  deriving Show
+
 -- | Build a cubic spline based on control points using given end
 -- conditions (not-a-knot, or natural)
 --
 -- <https://en.wikipedia.org/wiki/Spline_interpolation>
 makeSpline
-    :: forall a. (Ord a, Fractional a)
+    :: forall a. (Ord a, Fractional a, Show a)
     => SplineEnd a
     -> M.Map a a            -- ^ (x, y)
-    -> Maybe (Spline a)
+    -> Either SplineError (Spline a)
 makeSpline se ps = SV.withSizedList (M.toList ps) $ \(xsys :: SV.Vector n (a, a)) -> do
-      Refl <- Proxy @1 `isLE` Proxy @n
-      Refl <- Proxy @2 `isLE` Proxy @n
+      Refl <- maybe (Left SETooSmall) Right $ Proxy @1 `isLE` Proxy @n
+      Refl <- maybe (Left SETooSmall) Right $ Proxy @2 `isLE` Proxy @n
       let xs, ys :: SV.Vector n a
           (xs, ys) = SV.unzip xsys
           dxs, dys :: SV.Vector (n - 1) a
@@ -120,10 +125,11 @@ makeSpline se ps = SV.withSizedList (M.toList ps) $ \(xsys :: SV.Vector n (a, a)
             SENotAKnot      -> notAKnot rdxs rdxssq dydxssq
             SENatural       -> natural rdxs dydxssq
             SEClamped c0 c1 -> clamped c0 c1
-      solution <- solveTridiagonal (                    lowerDiag `SV.snoc` eeLower1)
-                                   (eeMain0   `SV.cons` mainDiag  `SV.snoc` eeMain1 )
-                                   (eeUpper0  `SV.cons` upperDiag                   )
-                                   (eeRhs0    `SV.cons` rhs       `SV.snoc` eeRhs1  )
+      solution <- maybe (Left SENoSolve) Right $
+            solveTridiagonal (                    lowerDiag `SV.snoc` eeLower1)
+                             (eeMain0   `SV.cons` mainDiag  `SV.snoc` eeMain1 )
+                             (eeUpper0  `SV.cons` upperDiag                   )
+                             (eeRhs0    `SV.cons` rhs       `SV.snoc` eeRhs1  )
       let as :: SV.Vector (n - 1) a
           as = SV.zipWith3 (\k dx dy -> k * dx - dy) (SV.init solution) dxs dys
           bs :: SV.Vector (n - 1) a
