@@ -18,7 +18,7 @@
 -- Stability   : experimental
 -- Portability : non-portable
 --
--- Empirical Mode Decomposition (Hilbert-Huang Transform) in pure Haskell.
+-- Empirical Mode Decomposition in pure Haskell.
 --
 -- Main interface is 'emd', with 'defaultEO'.  A tracing version that
 -- outputs a log to stdout is also available, as 'emdTrace'.  This can be
@@ -36,12 +36,9 @@
 -- when you know the size at compile-time) and 'withSized' (for when you
 -- don't).
 --
--- However, for convenience, "Numeric.EMD.Unsized" is provided with an
--- unsafe unsized interface.
---
 
 module Numeric.EMD (
-  -- * EMD (Hilbert-Huang Transform)
+  -- * Empirical Mode Decomposition
     emd
   , emdTrace
   , emd'
@@ -102,8 +99,8 @@ data SiftCondition a
 
 -- | Default 'SiftCondition'
 defaultSC :: Fractional a => SiftCondition a
--- defaultSC = SCStdDev 0.3 `SCOr` SCTimes 20
-defaultSC = SCStdDev 0.3
+defaultSC = SCStdDev 0.3 `SCOr` SCTimes 100     -- R package uses SCTimes 20, Matlab uses no limit
+-- defaultSC = SCStdDev 0.3
 
 -- | 'True' if stop
 testCondition
@@ -123,15 +120,15 @@ testCondition tc i v v' = go tc
       SCAnd f g  -> go f && go g
     eps = 0.0000001
 
--- | An @'EMD' v n a@ is a Hilbert-Huang transform of a time series with
--- @n@ items of type @a@ stored in a vector @v@.
+-- | An @'EMD' v n a@ is an Empirical Mode Decomposition of a time series
+-- with @n@ items of type @a@ stored in a vector @v@.
 data EMD v n a = EMD { emdIMFs     :: ![SVG.Vector v n a]
                      , emdResidual :: !(SVG.Vector v n a)
                      }
   deriving Show
 
--- | EMD decomposition (Hilbert-Huang Transform) of a given time series
--- with a given sifting stop condition.
+-- | EMD decomposition of a given time series with a given sifting stop
+-- condition.
 --
 -- Takes a sized vector to ensure that:
 --

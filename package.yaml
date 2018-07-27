@@ -1,5 +1,5 @@
 name:                emd
-version:             0.1.1.0
+version:             0.1.2.0
 github:              "mstksg/emd"
 license:             BSD3
 author:              "Justin Le"
@@ -12,7 +12,7 @@ extra-source-files:
 - test-data/*
 
 # Metadata used when publishing your package
-synopsis:            Empirical Mode Decomposition (Hilbert-Huang Transform)
+synopsis:            Empirical Mode Decomposition and Hilbert-Huang Transform
 category:            Math
 
 # To avoid duplicated efforts in documentation and dealing with the
@@ -32,8 +32,8 @@ ghc-options:
 library:
   source-dirs: src
   other-modules:
-    - Numeric.EMD.Internal.Tridiagonal
-    - Numeric.EMD.Internal.Extrema
+  - Numeric.EMD.Internal.Tridiagonal
+  - Numeric.EMD.Internal.Extrema
   dependencies:
   - finite-typelits
   - ghc-typelits-knownnat
