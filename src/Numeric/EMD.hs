@@ -259,12 +259,12 @@ extendExtrema xs = \case
                 (minIx, M.singleton (extendSym (fromIntegral minIx)) minVal)
               flippedMax = flip fmap (M.lookupMax maxs) $ \(maxIx, maxVal) ->
                 (maxIx, M.singleton (extendSym (fromIntegral maxIx)) maxVal)
-      in  addFirst <> addLast
+      in  addFirst `mappend` addLast
   where
     lastIx = fromIntegral $ maxBound @(Finite n)
     firstPoint = M.singleton 0 (SVG.head xs)
     lastPoint  = M.singleton lastIx (SVG.last xs)
-    firstLast  = firstPoint <> lastPoint
+    firstLast  = firstPoint `mappend` lastPoint
     extendSym i = 2 * lastIx - i
 
 -- | Build a splined vector against a map of control points.

@@ -22,7 +22,7 @@ description:         Please see the README on GitHub at <https://github.com/mstk
 tested-with:         GHC >= 8.2
 
 dependencies:
-- base >= 4.7 && < 5
+- base >= 4.10 && < 5
 - containers
 
 ghc-options:
