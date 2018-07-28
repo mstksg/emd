@@ -162,8 +162,7 @@ hilbertMagFreq v = (hilbertMag, hilbertFreq)
     v' = hilbertIm v
     hilbertMag   = SVG.zipWith (\x x' -> magnitude (x :+ x')) v v'
     hilbertPhase = SVG.zipWith (\x x' -> phase (x :+ x')) v v'
-    hilbertFreq  = SVG.map (wrap . (/ (2 * pi))) $ SVG.tail hilbertPhase - SVG.init hilbertPhase
-    wrap         = subtract 0.5 . (`mod'` 1) . (+ 0.5)
+    hilbertFreq  = SVG.map ((`mod'` 1) . (/ (2 * pi))) $ SVG.tail hilbertPhase - SVG.init hilbertPhase
 
 -- | Real part is original series and imaginary part is hilbert transformed
 -- series.  Creates a "helical" form of the original series that rotates

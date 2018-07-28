@@ -122,6 +122,9 @@ testCondition tc i v v' = go tc
 
 -- | An @'EMD' v n a@ is an Empirical Mode Decomposition of a time series
 -- with @n@ items of type @a@ stored in a vector @v@.
+--
+-- The component-wise sum of 'emdIMFs' and 'emdResidual' should yield
+-- exactly the original series.
 data EMD v n a = EMD { emdIMFs     :: ![SVG.Vector v n a]
                      , emdResidual :: !(SVG.Vector v n a)
                      }

@@ -44,9 +44,9 @@ data SplineEnd a
     -- | "Not-a-knot" condition: third derivatives are continuous at
     -- endpoints.  Default for matlab spline.
     = SENotAKnot
-    -- | "Natural" condition: curve becomes a straight line at endpoints.
+    -- | \"Natural\" condition: curve becomes a straight line at endpoints.
     | SENatural
-    -- | "Clamped" condition: Slope of curves at endpoints are explicitly
+    -- | \"Clamped\" condition: Slope of curves at endpoints are explicitly
     -- given.
     --
     -- @since 0.1.2.0
