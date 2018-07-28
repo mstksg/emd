@@ -2,12 +2,12 @@
 -- See Hoogle, http://www.haskell.org/hoogle/
 
 
--- | Empirical Mode Decomposition (Hilbert-Huang Transform)
+-- | Empirical Mode Decomposition and Hilbert-Huang Transform
 --   
 --   Please see the README on GitHub at
 --   <a>https://github.com/mstksg/emd#readme</a>
 @package emd
-@version 0.1.1.0
+@version 0.1.2.0
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -38,8 +38,7 @@ instance GHC.Classes.Eq a => GHC.Classes.Eq (Numeric.EMD.Internal.Spline.SplineE
 instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.Internal.Spline.SplineEnd a)
 
 
--- | Empirical Mode Decomposition (Hilbert-Huang Transform) in pure
---   Haskell.
+-- | Empirical Mode Decomposition in pure Haskell.
 --   
 --   Main interface is <a>emd</a>, with <a>defaultEO</a>. A tracing version
 --   that outputs a log to stdout is also available, as <a>emdTrace</a>.
@@ -58,13 +57,10 @@ instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.Internal.Spline.SplineEnd
 --   in <a>Data.Vector.Sized</a> and associated modules, including
 --   <tt>toSized</tt> (for when you know the size at compile-time) and
 --   <tt>withSized</tt> (for when you don't).
---   
---   However, for convenience, <a>Numeric.EMD.Unsized</a> is provided with
---   an unsafe unsized interface.
 module Numeric.EMD
 
--- | EMD decomposition (Hilbert-Huang Transform) of a given time series
---   with a given sifting stop condition.
+-- | EMD decomposition of a given time series with a given sifting stop
+--   condition.
 --   
 --   Takes a sized vector to ensure that:
 --   
@@ -82,9 +78,9 @@ emdTrace :: (Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m) => EMDOpts 
 -- | <a>emd</a> with a callback for each found IMF.
 emd' :: (Vector v a, KnownNat n, Fractional a, Ord a, Applicative m) => (SiftResult v (n + 1) a -> m r) -> EMDOpts a -> Vector v (n + 1) a -> m (EMD v (n + 1) a)
 
--- | An <tt><a>EMD</a> v n a</tt> is a Hilbert-Huang transform of a time
---   series with <tt>n</tt> items of type <tt>a</tt> stored in a vector
---   <tt>v</tt>.
+-- | An <tt><a>EMD</a> v n a</tt> is an Empirical Mode Decomposition of a
+--   time series with <tt>n</tt> items of type <tt>a</tt> stored in a
+--   vector <tt>v</tt>.
 data EMD v n a
 EMD :: ![Vector v n a] -> !(Vector v n a) -> EMD v n a
 [emdIMFs] :: EMD v n a -> ![Vector v n a]
@@ -164,110 +160,60 @@ instance GHC.Classes.Eq Numeric.EMD.BoundaryHandler
 instance GHC.Show.Show Numeric.EMD.BoundaryHandler
 
 
--- | Interface of <a>Numeric.EMD</a> re-exported in a non-typesafe
---   "unsized" form. Can be more convenient in certain situations, but
---   <a>Numeric.EMD</a> is recommended and preferred.
-module Numeric.EMD.Unsized
-
--- | EMD decomposition (Hilbert-Huang Transform) of a given time series
---   with a given sifting stop condition.
+-- | Hilbert-Huang transform in pure Haskell.
 --   
---   Returns <a>Nothing</a> if given an empty vector.
---   
---   See <a>emd</a> for a type-safe version with guaruntees on the output
---   vector sizes.
-emd :: (Vector v a, Fractional a, Ord a) => EMDOpts a -> v a -> Maybe (EMD v a)
-
--- | <a>emd</a>, but tracing results to stdout as IMFs are found. Useful
---   for debugging to see how long each step is taking.
---   
---   Returns <a>Nothing</a> if given an empty vector.
-emdTrace :: (Vector v a, Fractional a, Ord a, MonadIO m) => EMDOpts a -> v a -> m (Maybe (EMD v a))
-
--- | <a>emd</a> with a callback for each found IMF.
---   
---   Returns <a>Nothing</a> if given an empty vector.
-emd' :: (Vector v a, Ord a, Fractional a, Applicative m) => (SiftResult v a -> m r) -> EMDOpts a -> v a -> m (Maybe (EMD v a))
-
--- | An <tt><a>EMD</a> v a</tt> is a Hilbert-Huang transform of a time
---   series with items of type <tt>a</tt> stored in a vector <tt>v</tt>.
-data EMD v a
-EMD :: ![v a] -> !(v a) -> EMD v a
-[emdIMFs] :: EMD v a -> ![v a]
-[emdResidual] :: EMD v a -> !(v a)
-
--- | Options for EMD composition.
-data EMDOpts a
-EO :: SiftCondition a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts a
-
--- | stop condition for sifting
-[eoSiftCondition] :: EMDOpts a -> SiftCondition a
-
--- | end conditions for envelope splines
-[eoSplineEnd] :: EMDOpts a -> SplineEnd a
-
--- | process for handling boundary
-[eoBoundaryHandler] :: EMDOpts a -> Maybe BoundaryHandler
-
--- | Default <a>EMDOpts</a>
-defaultEO :: Fractional a => EMDOpts a
-data BoundaryHandler
-
--- | Clamp envelope at end points (Matlab implementation)
-BHClamp :: BoundaryHandler
-
--- | Extend boundaries symmetrically
-BHSymmetric :: BoundaryHandler
-
--- | Stop conditions for sifting process
-data SiftCondition a
-
--- | Stop using standard SD method
-SCStdDev :: !a -> SiftCondition a
-
--- | Stop after a fixed number of sifting iterations
-SCTimes :: !Int -> SiftCondition a
-
--- | One or the other
-SCOr :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
-
--- | Stop when both conditions are met
-SCAnd :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
-
--- | Default <a>SiftCondition</a>
-defaultSC :: Fractional a => SiftCondition a
-
--- | End condition for spline
-data SplineEnd a
-SENotAKnot :: SplineEnd a
-SENatural :: SplineEnd a
-SEClamped :: a -> a -> SplineEnd a
-
--- | Iterated sifting process, used to produce either an IMF or a residual.
---   
---   Returns <a>Nothing</a> if given an empty vector.
-sift :: (Vector v a, Fractional a, Ord a) => EMDOpts a -> v a -> Maybe (SiftResult v a)
-
--- | The result of a sifting operation. Each sift either yields a residual,
---   or a new IMF.
-data SiftResult v a
-SRResidual :: !(v a) -> SiftResult v a
-
--- | number of iterations
-SRIMF :: !(v a) -> !Int -> SiftResult v a
-instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.EMD.Unsized.EMD v a)
-
+--   The main data type is <a>HHT</a>, which can be generated using
+--   <a>hht</a> or <a>hhtEmd</a>. See <a>Numeric.EMD</a> for information on
+--   why this module uses "sized vectors", and how to convert unsized
+--   vectors to sized vectors.
 module Numeric.HHT
+
+-- | Compute the Hilbert-Huang transform from a given Empirical Mode
+--   Decomposition.
 hhtEmd :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMD v (n + 1) a -> HHT v n a
+
+-- | Directly compute the Hilbert-Huang transform of a given time series.
+--   Essentially is a composition of <a>hhtEmd</a> and <a>emd</a>. See
+--   <a>hhtEmd</a> for a more flexible version.
 hht :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMDOpts a -> Vector v (n + 1) a -> HHT v n a
-marginal :: forall v n a. (Vector v a, KnownNat n, Ord a, Num a) => HHT v n a -> Map a a
+
+-- | Compute the full Hilbert-Huang Transform spectrum. At each timestep is
+--   a sparse map of frequency components and their respective magnitudes.
+--   Frequencies not in the map are considered to be zero.
+--   
+--   Takes a "binning" function to allow you to specify how specific you
+--   want your frequencies to be.
+hhtSpectrum :: forall n a k. (KnownNat n, Ord k, Num a) => (a -> k) -> HHT Vector n a -> Vector n (Map k a)
+
+-- | Compute the marginal spectrum given a Hilbert-Huang Transform. A
+--   binning function is accepted to allow you to specify how specific you
+--   want your frequencies to be.
+marginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Map k a
+
+-- | Compute the instantaneous energy of the time series at every step via
+--   the Hilbert-Huang Transform.
 instantaneousEnergy :: forall v n a. (Vector v a, KnownNat n, Num a) => HHT v n a -> Vector v n a
+
+-- | Degree of stationarity, as a function of frequency.
+degreeOfStationarity :: forall v n a k. (Vector v a, KnownNat n, Ord k, Fractional a) => (a -> k) -> HHT v n a -> Map k a
+
+-- | A Hilbert-Huang Transform. An <tt><a>HHT</a> v n a</tt> is a
+--   Hilbert-Huang transform of an <tt>n</tt>-item time series of items of
+--   type <tt>a</tt> represented using vector <tt>v</tt>.
+--   
+--   Create using <a>hht</a> or <a>hhtEmd</a>.
 newtype HHT v n a
 HHT :: [HHTLine v n a] -> HHT v n a
 [hhtLines] :: HHT v n a -> [HHTLine v n a]
+
+-- | A Hilbert Trasnform of a given IMF, given as a "skeleton line".
 data HHTLine v n a
 HHTLine :: !(Vector v n a) -> !(Vector v n a) -> HHTLine v n a
+
+-- | IMF HHT Magnitude as a time series
 [hlMags] :: HHTLine v n a -> !(Vector v n a)
+
+-- | IMF HHT instantaneous frequency as a time series (between 0 and 1)
 [hlFreqs] :: HHTLine v n a -> !(Vector v n a)
 
 -- | Options for EMD composition.
@@ -318,8 +264,30 @@ SENatural :: SplineEnd a
 SEClamped :: a -> a -> SplineEnd a
 
 -- | Real part is original series and imaginary part is hilbert transformed
---   series.
+--   series. Creates a "helical" form of the original series that rotates
+--   along the complex plane.
+--   
+--   Numerically assumes that the signal is zero everywhere outside of the
+--   vector, instead of the periodic assumption taken by matlab's version.
 hilbert :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, Floating a) => Vector v n a -> Vector v n (Complex a)
 
--- | Can be made faster using an FFT and iFFT combo
-hilbert' :: forall v n a. (Vector v a, KnownNat n, Floating a) => Vector v n a -> Vector v n a
+-- | Hilbert transformed series. Essentially the same series, but
+--   phase-shifted 90 degrees. Is so-named because it is the "imaginary
+--   part" of the proper hilbert transform, <a>hilbert</a>.
+--   
+--   Numerically assumes that the signal is zero everywhere outside of the
+--   vector, instead of the periodic assumption taken by matlab's version.
+hilbertIm :: forall v n a. (Vector v a, KnownNat n, Floating a) => Vector v n a -> Vector v n a
+
+-- | Given a time series, return a time series of the <i>magnitude</i> of
+--   the hilbert transform and the <i>frequency</i> of the hilbert
+--   transform, in units of revolutions per tick. Is only expected to taken
+--   in proper/legal IMFs.
+--   
+--   The frequency will always be between 0 and 1, since we can't determine
+--   anything faster given the discretization, and we exclude negative
+--   values as physically unmeaningful for an IMF.
+hilbertMagFreq :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => Vector v (n + 1) a -> (Vector v (n + 1) a, Vector v n a)
+instance GHC.Classes.Ord (v a) => GHC.Classes.Ord (Numeric.HHT.HHTLine v n a)
+instance GHC.Classes.Eq (v a) => GHC.Classes.Eq (Numeric.HHT.HHTLine v n a)
+instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.HHT.HHTLine v n a)
