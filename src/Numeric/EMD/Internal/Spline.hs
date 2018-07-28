@@ -40,9 +40,17 @@ import qualified Data.Map                         as M
 import qualified Data.Vector.Sized                as SV
 
 -- | End condition for spline
-data SplineEnd a = SENotAKnot
-                 | SENatural
-                 | SEClamped a a
+data SplineEnd a
+    -- | "Not-a-knot" condition: third derivatives are continuous at
+    -- endpoints.  Default for matlab spline.
+    = SENotAKnot
+    -- | "Natural" condition: curve becomes a straight line at endpoints.
+    | SENatural
+    -- | "Clamped" condition: Slope of curves at endpoints are explicitly
+    -- given.
+    --
+    -- @since 0.1.2.0
+    | SEClamped a a
   deriving (Show, Eq, Ord)
 
 data SplineCoef a = SC { _scAlpha  :: !a      -- ^ a
