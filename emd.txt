@@ -7,7 +7,7 @@
 --   Please see the README on GitHub at
 --   <a>https://github.com/mstksg/emd#readme</a>
 @package emd
-@version 0.1.2.0
+@version 0.1.2.1
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -89,6 +89,9 @@ emd' :: (Vector v a, KnownNat n, Fractional a, Ord a, Applicative m) => (SiftRes
 -- | An <tt><a>EMD</a> v n a</tt> is an Empirical Mode Decomposition of a
 --   time series with <tt>n</tt> items of type <tt>a</tt> stored in a
 --   vector <tt>v</tt>.
+--   
+--   The component-wise sum of <a>emdIMFs</a> and <a>emdResidual</a> should
+--   yield exactly the original series.
 data EMD v n a
 EMD :: ![Vector v n a] -> !(Vector v n a) -> EMD v n a
 [emdIMFs] :: EMD v n a -> ![Vector v n a]
