@@ -20,8 +20,16 @@ data Spline a
 
 -- | End condition for spline
 data SplineEnd a
+
+-- | "Not-a-knot" condition: third derivatives are continuous at endpoints.
+--   Default for matlab spline.
 SENotAKnot :: SplineEnd a
+
+-- | <a>Natural</a> condition: curve becomes a straight line at endpoints.
 SENatural :: SplineEnd a
+
+-- | <a>Clamped</a> condition: Slope of curves at endpoints are explicitly
+--   given.
 SEClamped :: a -> a -> SplineEnd a
 
 -- | Build a cubic spline based on control points using given end
@@ -129,8 +137,16 @@ defaultSC :: Fractional a => SiftCondition a
 
 -- | End condition for spline
 data SplineEnd a
+
+-- | "Not-a-knot" condition: third derivatives are continuous at endpoints.
+--   Default for matlab spline.
 SENotAKnot :: SplineEnd a
+
+-- | <a>Natural</a> condition: curve becomes a straight line at endpoints.
 SENatural :: SplineEnd a
+
+-- | <a>Clamped</a> condition: Slope of curves at endpoints are explicitly
+--   given.
 SEClamped :: a -> a -> SplineEnd a
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
@@ -259,8 +275,16 @@ defaultSC :: Fractional a => SiftCondition a
 
 -- | End condition for spline
 data SplineEnd a
+
+-- | "Not-a-knot" condition: third derivatives are continuous at endpoints.
+--   Default for matlab spline.
 SENotAKnot :: SplineEnd a
+
+-- | <a>Natural</a> condition: curve becomes a straight line at endpoints.
 SENatural :: SplineEnd a
+
+-- | <a>Clamped</a> condition: Slope of curves at endpoints are explicitly
+--   given.
 SEClamped :: a -> a -> SplineEnd a
 
 -- | Real part is original series and imaginary part is hilbert transformed
