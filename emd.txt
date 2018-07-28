@@ -25,10 +25,10 @@ data SplineEnd a
 --   Default for matlab spline.
 SENotAKnot :: SplineEnd a
 
--- | <a>Natural</a> condition: curve becomes a straight line at endpoints.
+-- | "Natural" condition: curve becomes a straight line at endpoints.
 SENatural :: SplineEnd a
 
--- | <a>Clamped</a> condition: Slope of curves at endpoints are explicitly
+-- | "Clamped" condition: Slope of curves at endpoints are explicitly
 --   given.
 SEClamped :: a -> a -> SplineEnd a
 
@@ -142,10 +142,10 @@ data SplineEnd a
 --   Default for matlab spline.
 SENotAKnot :: SplineEnd a
 
--- | <a>Natural</a> condition: curve becomes a straight line at endpoints.
+-- | "Natural" condition: curve becomes a straight line at endpoints.
 SENatural :: SplineEnd a
 
--- | <a>Clamped</a> condition: Slope of curves at endpoints are explicitly
+-- | "Clamped" condition: Slope of curves at endpoints are explicitly
 --   given.
 SEClamped :: a -> a -> SplineEnd a
 
@@ -280,10 +280,10 @@ data SplineEnd a
 --   Default for matlab spline.
 SENotAKnot :: SplineEnd a
 
--- | <a>Natural</a> condition: curve becomes a straight line at endpoints.
+-- | "Natural" condition: curve becomes a straight line at endpoints.
 SENatural :: SplineEnd a
 
--- | <a>Clamped</a> condition: Slope of curves at endpoints are explicitly
+-- | "Clamped" condition: Slope of curves at endpoints are explicitly
 --   given.
 SEClamped :: a -> a -> SplineEnd a
 
