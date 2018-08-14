@@ -1,5 +1,7 @@
 {-# LANGUAGE DataKinds                                #-}
+{-# LANGUAGE ExistentialQuantification                #-}
 {-# LANGUAGE FlexibleContexts                         #-}
+{-# LANGUAGE RankNTypes                               #-}
 {-# LANGUAGE RecordWildCards                          #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}
 {-# LANGUAGE TypeApplications                         #-}
@@ -25,12 +27,16 @@
 -- @since 0.1.2.0
 
 module Numeric.HHT (
+  -- * Hilbert-Huang Transform
     hhtEmd
   , hht
   , hhtSpectrum
+  -- ** Computing properties
   , marginal, instantaneousEnergy, degreeOfStationarity
   , HHT(..), HHTLine(..)
   , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
+  -- ** SomeHHT
+  , SomeHHT(..), someHht
   -- * Hilbert transforms (internal usage)
   , hilbert
   , hilbertIm
@@ -60,29 +66,50 @@ data HHTLine v n a = HHTLine
     }
   deriving (Show, Eq, Ord)
 
--- | A Hilbert-Huang Transform.  An @'HHT' v n a@ is a Hilbert-Huang
--- transform of an @n@-item time series of items of type @a@ represented
--- using vector @v@.
+-- | A Hilbert-Huang Transform.  An @'HHT' v n i a@ is a Hilbert-Huang
+-- transform of an @n@-item time series with @i@ intrinsic mode functions
+-- (IMFs) of items of type @a@ represented using vector @v@.
 --
 -- Create using 'hht' or 'hhtEmd'.
-newtype HHT v n a = HHT { hhtLines :: [HHTLine v n a] }
+newtype HHT v n i a = HHT { hhtLines :: SV.Vector i (HHTLine v n a) }
+
+-- | A @'SomeHHT' v n a@ is a convenient wrapper for an @'HHT' v n i a@
+-- when you don't care about @i@, the number of intrinsic mode functions.
+--
+-- Pattern match to reveal the 'HHT' for functions that expect an 'EMD';
+-- however, anything you do with the 'HHT' must be valid for /all/
+-- potential IMF counts.
+data SomeHHT v n a = forall i. KnownNat i => SomeHHT { getSomeHHT :: HHT v n i a }
 
 -- | Directly compute the Hilbert-Huang transform of a given time series.
 -- Essentially is a composition of 'hhtEmd' and 'emd'.  See 'hhtEmd' for
 -- a more flexible version.
-hht :: forall v n a. (VG.Vector v a, KnownNat n, RealFloat a)
+--
+-- Returns an existentially quanitified number of IMF functions inside
+-- a callback.  See 'someHht' as a version that returns a wrapped data type
+-- instead.
+hht :: forall v n a r. (VG.Vector v a, KnownNat n, RealFloat a)
     => EMDOpts a
     -> SVG.Vector v (n + 1) a
-    -> HHT v n a
-hht eo = hhtEmd . emd eo
+    -> (forall i. KnownNat i => HHT v n i a -> r)
+    -> r
+hht eo v f = emd eo v (f . hhtEmd)
+
+-- | A version of 'hht' that returns a 'SomeHHT'.
+someHht
+    :: forall v n a. (VG.Vector v a, KnownNat n, RealFloat a)
+    => EMDOpts a
+    -> SVG.Vector v (n + 1) a
+    -> SomeHHT v n a
+someHht eo v = hht eo v SomeHHT
 
 -- | Compute the Hilbert-Huang transform from a given Empirical Mode
 -- Decomposition.
 hhtEmd
-    :: forall v n a. (VG.Vector v a, KnownNat n, RealFloat a)
-    => EMD v (n + 1) a
-    -> HHT v n a
-hhtEmd EMD{..} = HHT $ map go emdIMFs
+    :: forall v n a i. (VG.Vector v a, KnownNat n, RealFloat a)
+    => EMD v (n + 1) i a
+    -> HHT v n i a
+hhtEmd EMD{..} = HHT $ SV.map go emdIMFs
   where
     go i = HHTLine (SVG.init m) f
       where
@@ -95,11 +122,11 @@ hhtEmd EMD{..} = HHT $ map go emdIMFs
 -- Takes a "binning" function to allow you to specify how specific you want
 -- your frequencies to be.
 hhtSpectrum
-    :: forall n a k. (KnownNat n, Ord k, Num a)
+    :: forall n a k i. (KnownNat n, Ord k, Num a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
-    -> HHT V.Vector n a
+    -> HHT V.Vector n i a
     -> SV.Vector n (M.Map k a)
-hhtSpectrum f = foldl' ((SV.zipWith . M.unionWith) (+)) (pure mempty) . map go . hhtLines
+hhtSpectrum f = foldl' ((SV.zipWith . M.unionWith) (+)) (pure mempty) . SV.map go . hhtLines
   where
     go :: HHTLine V.Vector n a -> SV.Vector n (M.Map k a)
     go HHTLine{..} = SV.generate $ \i ->
@@ -109,9 +136,9 @@ hhtSpectrum f = foldl' ((SV.zipWith . M.unionWith) (+)) (pure mempty) . map go .
 -- A binning function is accepted to allow you to specify how specific you
 -- want your frequencies to be.
 marginal
-    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Num a)
+    :: forall v n a k i. (VG.Vector v a, KnownNat n, Ord k, Num a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
-    -> HHT v n a
+    -> HHT v n i a
     -> M.Map k a
 marginal f = M.unionsWith (+) . concatMap go . hhtLines
   where
@@ -122,16 +149,16 @@ marginal f = M.unionsWith (+) . concatMap go . hhtLines
 -- | Compute the instantaneous energy of the time series at every step via
 -- the Hilbert-Huang Transform.
 instantaneousEnergy
-    :: forall v n a. (VG.Vector v a, KnownNat n, Num a)
-    => HHT v n a
+    :: forall v n a i. (VG.Vector v a, KnownNat n, Num a)
+    => HHT v n i a
     -> SVG.Vector v n a
-instantaneousEnergy = sum . map (SVG.map (^ (2 :: Int)) . hlMags) . hhtLines
+instantaneousEnergy = sum . SV.map (SVG.map (^ (2 :: Int)) . hlMags) . hhtLines
 
 -- | Degree of stationarity, as a function of frequency.
 degreeOfStationarity
-    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Fractional a)
+    :: forall v n a k i. (VG.Vector v a, KnownNat n, Ord k, Fractional a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
-    -> HHT v n a
+    -> HHT v n i a
     -> M.Map k a
 degreeOfStationarity f h = M.unionsWith (+)
                          . concatMap go

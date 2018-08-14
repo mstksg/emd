@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns                             #-}
 {-# LANGUAGE GADTs                                    #-}
 {-# LANGUAGE LambdaCase                               #-}
+{-# LANGUAGE RankNTypes                               #-}
 {-# LANGUAGE RecordWildCards                          #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}
 {-# LANGUAGE TypeApplications                         #-}
@@ -44,6 +45,9 @@ module Numeric.EMD (
   , emd'
   , EMD(..)
   , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
+  -- ** SomeEMD
+  , SomeEMD(..)
+  , someEmd, someEmdTrace, someEmd'
   -- * Internal
   , sift, SiftResult(..)
   , envelopes
@@ -60,6 +64,7 @@ import           Text.Printf
 import qualified Data.Map                     as M
 import qualified Data.Vector.Generic          as VG
 import qualified Data.Vector.Generic.Sized    as SVG
+import qualified Data.Vector.Sized            as SV
 
 -- | Options for EMD composition.
 data EMDOpts a = EO { eoSiftCondition   :: SiftCondition a  -- ^ stop condition for sifting
@@ -120,15 +125,24 @@ testCondition tc i v v' = go tc
       SCAnd f g  -> go f && go g
     eps = 0.0000001
 
--- | An @'EMD' v n a@ is an Empirical Mode Decomposition of a time series
--- with @n@ items of type @a@ stored in a vector @v@.
+-- | An @'EMD' v n i a@ is an Empirical Mode Decomposition of a time series
+-- with @n@ items of type @a@ stored in a vector @v@, with @i@ intrinsic
+-- mode functions (IMFs)
 --
 -- The component-wise sum of 'emdIMFs' and 'emdResidual' should yield
 -- exactly the original series.
-data EMD v n a = EMD { emdIMFs     :: ![SVG.Vector v n a]
-                     , emdResidual :: !(SVG.Vector v n a)
-                     }
+data EMD v n i a = EMD { emdIMFs     :: !(SV.Vector i (SVG.Vector v n a))
+                       , emdResidual :: !(SVG.Vector v n a)
+                       }
   deriving Show
+
+-- | A @'SomeEMD' v n a@ is a convenient wrapper for an @'EMD' v n i a@
+-- when you don't care about @i@, the number of intrinsic mode functions.
+--
+-- Pattern match to reveal the 'EMD' for functions that expect an 'EMD';
+-- however, anything you do with the 'EMD' must be valid for /all/
+-- potential IMF counts.
+data SomeEMD v n a = forall i. KnownNat i => SomeEMD { getSomeEMD :: EMD v n i a }
 
 -- | EMD decomposition of a given time series with a given sifting stop
 -- condition.
@@ -138,11 +152,23 @@ data EMD v n a = EMD { emdIMFs     :: ![SVG.Vector v n a]
 -- 1.  The resulting 'EMD' contains IMFs that are all the same length as
 --     the input vector
 -- 2.  We provide a vector of size of at least one.
+--
+-- Returns an existentially quanitified number of IMF functions inside
+-- a callback.  See 'someEmd' as a version that returns a wrapped data type
+-- instead.
 emd :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => EMDOpts a
     -> SVG.Vector v (n + 1) a
-    -> EMD v (n + 1) a
-emd eo = runIdentity . emd' (const (pure ())) eo
+    -> (forall i. KnownNat i => EMD v (n + 1) i a -> r)
+    -> r
+emd eo v f = runIdentity $ emd' (const (pure ())) eo v (Identity . f)
+
+-- | A version of 'emd' that returns a 'SomeEMD'.
+someEmd :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+    => EMDOpts a
+    -> SVG.Vector v (n + 1) a
+    -> SomeEMD v (n + 1) a
+someEmd eo v = emd eo v SomeEMD
 
 -- | 'emd', but tracing results to stdout as IMFs are found.  Useful for
 -- debugging to see how long each step is taking.
@@ -150,25 +176,44 @@ emdTrace
     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m)
     => EMDOpts a
     -> SVG.Vector v (n + 1) a
-    -> m (EMD v (n + 1) a)
+    -> (forall i. KnownNat i => EMD v (n + 1) i a -> m r)
+    -> m r
 emdTrace = emd' $ \case
     SRResidual _ -> liftIO $ putStrLn "Residual found."
     SRIMF _ i    -> liftIO $ printf "IMF found (%d sifts)\n" i
 
+-- | A version of 'emdTrace' that returns a 'SomeEMD'.
+someEmdTrace
+    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m)
+    => EMDOpts a
+    -> SVG.Vector v (n + 1) a
+    -> m (SomeEMD v (n + 1) a)
+someEmdTrace eo v = emdTrace eo v (pure . SomeEMD)
+
 -- | 'emd' with a callback for each found IMF.
 emd'
-    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, Applicative m)
-    => (SiftResult v (n + 1) a -> m r)
+    :: forall v n m a b r. (VG.Vector v a, KnownNat n, Fractional a, Ord a, Applicative m)
+    => (SiftResult v (n + 1) a -> m b)
     -> EMDOpts a
     -> SVG.Vector v (n + 1) a
-    -> m (EMD v (n + 1) a)
-emd' cb eo = go id
+    -> (forall i. KnownNat i => EMD v (n + 1) i a -> m r)
+    -> m r
+emd' cb eo v0 f = go id v0
   where
     go !imfs !v = cb res *> case res of
-        SRResidual r -> pure $ EMD (imfs []) r
+        SRResidual r -> SV.withSizedList (imfs []) $ \imfs' ->
+          f $ EMD imfs' r
         SRIMF v' _   -> go (imfs . (v':)) (v - v')
       where
         res = sift eo v
+
+someEmd'
+    :: forall v n m a b. (VG.Vector v a, KnownNat n, Fractional a, Ord a, Applicative m)
+    => (SiftResult v (n + 1) a -> m b)
+    -> EMDOpts a
+    -> SVG.Vector v (n + 1) a
+    -> m (SomeEMD v (n + 1) a)
+someEmd' cb eo v0 = emd' cb eo v0 (pure . SomeEMD)
 
 -- | The result of a sifting operation.  Each sift either yields
 -- a residual, or a new IMF.
@@ -216,13 +261,10 @@ envelopes se bh xs = do
     (,) <$> splineAgainst se emin mins
         <*> splineAgainst se emax maxs
   where
-    -- minMax = M.fromList [(minBound, SVG.head xs), (maxBound, SVG.last xs)]
     (mins,maxs) = extrema xs
     (emin,emax) = case bh of
       Nothing  -> mempty
       Just bh' -> extendExtrema xs bh' (mins,maxs)
-    --   | isJust bh = (mins `M.union` minMax, maxs `M.union` minMax)
-    --   | otherwise = (mins, maxs)
 
 extendExtrema
     :: forall v n a. (VG.Vector v a, KnownNat n)
@@ -230,7 +272,6 @@ extendExtrema
     -> BoundaryHandler
     -> (M.Map (Finite (n + 1)) a, M.Map (Finite (n + 1)) a)
     -> (M.Map Int a, M.Map Int a)
-    -- (M.Map (Finite (n + 1)) a, M.Map (Finite (n + 1)) a)
 extendExtrema xs = \case
     BHClamp     -> const (firstLast, firstLast)
     BHSymmetric -> \(mins, maxs) ->
