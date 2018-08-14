@@ -105,6 +105,9 @@ someHht eo v = hht eo v SomeHHT
 
 -- | Compute the Hilbert-Huang transform from a given Empirical Mode
 -- Decomposition.
+--
+-- The returning 'HHT' will always have the same number of IMFs as the
+-- given 'EMD', and this is enforced in the type.
 hhtEmd
     :: forall v n a i. (VG.Vector v a, KnownNat n, RealFloat a)
     => EMD v (n + 1) i a

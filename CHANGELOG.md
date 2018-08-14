@@ -1,6 +1,24 @@
 Changelog
 =========
 
+Version 0.2.0.0
+---------------
+
+*August 13, 2018*
+
+<https://github.com/mstksg/emd/releases/tag/v0.2.0.0>
+
+*   Rewrite API to be "more type-safe".  `EMD` and `HHT` now contain the number
+    of IMFs in their type, and `emd` (and `emdTrace` and `emd'`) and `hht` now
+    return existentially quantified types in a continuation.
+
+    The only real benefit is that `hhtEmd` now guarantees that it preserves the
+    number of IMFs.
+
+    You can use `someEmd`, `someHht` with the `SomeEMD` and `SomeHHT` wrapper
+    types to recover the original API.
+
+
 Version 0.1.2.1
 ---------------
 
