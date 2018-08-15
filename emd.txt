@@ -7,7 +7,7 @@
 --   Please see the README on GitHub at
 --   <a>https://github.com/mstksg/emd#readme</a>
 @package emd
-@version 0.1.2.1
+@version 0.1.3.0
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -41,9 +41,11 @@ makeSpline :: forall a. (Ord a, Fractional a) => SplineEnd a -> Map a a -> Maybe
 -- | Sample a spline at a given point.
 sampleSpline :: (Fractional a, Ord a) => Spline a -> a -> a
 instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.Internal.Spline.SplineCoef a)
+instance GHC.Generics.Generic (Numeric.EMD.Internal.Spline.SplineEnd a)
 instance GHC.Classes.Ord a => GHC.Classes.Ord (Numeric.EMD.Internal.Spline.SplineEnd a)
 instance GHC.Classes.Eq a => GHC.Classes.Eq (Numeric.EMD.Internal.Spline.SplineEnd a)
 instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.Internal.Spline.SplineEnd a)
+instance Data.Binary.Class.Binary a => Data.Binary.Class.Binary (Numeric.EMD.Internal.Spline.SplineEnd a)
 
 
 -- | Empirical Mode Decomposition in pure Haskell.
@@ -121,6 +123,18 @@ BHClamp :: BoundaryHandler
 BHSymmetric :: BoundaryHandler
 
 -- | Stop conditions for sifting process
+--   
+--   Data type is lazy in its fields, so this infinite data type:
+--   
+--   <pre>
+--   nTimes n = SCTimes n <a>SCOr</a> nTimes (n + 1)
+--   </pre>
+--   
+--   will be treated identically as:
+--   
+--   <pre>
+--   nTimes = SCTimes
+--   </pre>
 data SiftCondition a
 
 -- | Stop using standard SD method
@@ -167,16 +181,28 @@ SRIMF :: !(Vector v n a) -> !Int -> SiftResult v n a
 --   <a>Nothing</a> if there are not enough local minimum or maximums to
 --   create the splines.
 envelopes :: (Vector v a, KnownNat n, Fractional a, Ord a) => SplineEnd a -> Maybe BoundaryHandler -> Vector v (n + 1) a -> Maybe (Vector v (n + 1) a, Vector v (n + 1) a)
+instance GHC.Classes.Ord (v a) => GHC.Classes.Ord (Numeric.EMD.EMD v n a)
+instance GHC.Classes.Eq (v a) => GHC.Classes.Eq (Numeric.EMD.EMD v n a)
+instance GHC.Generics.Generic (Numeric.EMD.EMD v n a)
 instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.EMD.EMD v n a)
+instance GHC.Generics.Generic (Numeric.EMD.EMDOpts a)
 instance GHC.Classes.Ord a => GHC.Classes.Ord (Numeric.EMD.EMDOpts a)
 instance GHC.Classes.Eq a => GHC.Classes.Eq (Numeric.EMD.EMDOpts a)
 instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.EMDOpts a)
+instance GHC.Generics.Generic (Numeric.EMD.SiftCondition a)
 instance GHC.Classes.Ord a => GHC.Classes.Ord (Numeric.EMD.SiftCondition a)
 instance GHC.Classes.Eq a => GHC.Classes.Eq (Numeric.EMD.SiftCondition a)
 instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.SiftCondition a)
+instance GHC.Generics.Generic Numeric.EMD.BoundaryHandler
 instance GHC.Classes.Ord Numeric.EMD.BoundaryHandler
 instance GHC.Classes.Eq Numeric.EMD.BoundaryHandler
 instance GHC.Show.Show Numeric.EMD.BoundaryHandler
+instance (Data.Vector.Generic.Base.Vector v a, GHC.TypeNats.KnownNat n, Data.Binary.Class.Binary (v a)) => Data.Binary.Class.Binary (Numeric.EMD.EMD v n a)
+instance Data.Binary.Class.Binary a => Data.Binary.Class.Binary (Numeric.EMD.EMDOpts a)
+instance GHC.Real.Fractional a => Data.Default.Class.Default (Numeric.EMD.EMDOpts a)
+instance Data.Binary.Class.Binary a => Data.Binary.Class.Binary (Numeric.EMD.SiftCondition a)
+instance GHC.Real.Fractional a => Data.Default.Class.Default (Numeric.EMD.SiftCondition a)
+instance Data.Binary.Class.Binary Numeric.EMD.BoundaryHandler
 
 
 -- | Hilbert-Huang transform in pure Haskell.
@@ -259,6 +285,18 @@ BHClamp :: BoundaryHandler
 BHSymmetric :: BoundaryHandler
 
 -- | Stop conditions for sifting process
+--   
+--   Data type is lazy in its fields, so this infinite data type:
+--   
+--   <pre>
+--   nTimes n = SCTimes n <a>SCOr</a> nTimes (n + 1)
+--   </pre>
+--   
+--   will be treated identically as:
+--   
+--   <pre>
+--   nTimes = SCTimes
+--   </pre>
 data SiftCondition a
 
 -- | Stop using standard SD method
@@ -315,6 +353,13 @@ hilbertIm :: forall v n a. (Vector v a, KnownNat n, Floating a) => Vector v n a 
 --   anything faster given the discretization, and we exclude negative
 --   values as physically unmeaningful for an IMF.
 hilbertMagFreq :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => Vector v (n + 1) a -> (Vector v (n + 1) a, Vector v n a)
+instance GHC.Generics.Generic (Numeric.HHT.HHT v n a)
+instance GHC.Classes.Ord (v a) => GHC.Classes.Ord (Numeric.HHT.HHT v n a)
+instance GHC.Classes.Eq (v a) => GHC.Classes.Eq (Numeric.HHT.HHT v n a)
+instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.HHT.HHT v n a)
+instance GHC.Generics.Generic (Numeric.HHT.HHTLine v n a)
 instance GHC.Classes.Ord (v a) => GHC.Classes.Ord (Numeric.HHT.HHTLine v n a)
 instance GHC.Classes.Eq (v a) => GHC.Classes.Eq (Numeric.HHT.HHTLine v n a)
 instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.HHT.HHTLine v n a)
+instance (Data.Vector.Generic.Base.Vector v a, GHC.TypeNats.KnownNat n, Data.Binary.Class.Binary (v a)) => Data.Binary.Class.Binary (Numeric.HHT.HHT v n a)
+instance (Data.Vector.Generic.Base.Vector v a, GHC.TypeNats.KnownNat n, Data.Binary.Class.Binary (v a)) => Data.Binary.Class.Binary (Numeric.HHT.HHTLine v n a)
