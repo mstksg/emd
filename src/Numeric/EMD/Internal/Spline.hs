@@ -1,5 +1,6 @@
 {-# LANGUAGE ApplicativeDo                            #-}
 {-# LANGUAGE DataKinds                                #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GADTs                                    #-}
 {-# LANGUAGE RecordWildCards                          #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}
@@ -33,9 +34,11 @@ import           Data.Finite
 import           Data.Maybe
 import           Data.Proxy
 import           Data.Type.Equality
+import           GHC.Generics                     (Generic)
 import           GHC.TypeLits.Compare
 import           GHC.TypeNats
 import           Numeric.EMD.Internal.Tridiagonal
+import qualified Data.Binary                      as Bi
 import qualified Data.Map                         as M
 import qualified Data.Vector.Sized                as SV
 
@@ -51,7 +54,9 @@ data SplineEnd a
     --
     -- @since 0.1.2.0
     | SEClamped a a
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
+
+instance Bi.Binary a => Bi.Binary (SplineEnd a)
 
 data SplineCoef a = SC { _scAlpha  :: !a      -- ^ a
                        , _scBeta   :: !a      -- ^ b

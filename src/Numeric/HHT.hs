@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds                                #-}
+{-# LANGUAGE DeriveGeneric                            #-}
 {-# LANGUAGE FlexibleContexts                         #-}
 {-# LANGUAGE RecordWildCards                          #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}
@@ -43,8 +44,10 @@ import           Data.Fixed
 import           Data.List
 import           Data.Proxy
 import           Data.Semigroup
+import           GHC.Generics              (Generic)
 import           GHC.TypeNats
 import           Numeric.EMD
+import qualified Data.Binary               as Bi
 import qualified Data.Map                  as M
 import qualified Data.Vector               as V
 import qualified Data.Vector.Generic       as VG
@@ -58,7 +61,15 @@ data HHTLine v n a = HHTLine
       -- | IMF HHT instantaneous frequency as a time series (between 0 and 1)
     , hlFreqs :: !(SVG.Vector v n a)
     }
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
+
+instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (HHTLine v n a) where
+    put HHTLine{..} = Bi.put (SVG.fromSized hlMags )
+                   *> Bi.put (SVG.fromSized hlFreqs)
+    get = do
+      Just hlMags  <- SVG.toSized <$> Bi.get
+      Just hlFreqs <- SVG.toSized <$> Bi.get
+      pure HHTLine{..}
 
 -- | A Hilbert-Huang Transform.  An @'HHT' v n a@ is a Hilbert-Huang
 -- transform of an @n@-item time series of items of type @a@ represented
@@ -66,6 +77,9 @@ data HHTLine v n a = HHTLine
 --
 -- Create using 'hht' or 'hhtEmd'.
 newtype HHT v n a = HHT { hhtLines :: [HHTLine v n a] }
+  deriving (Show, Eq, Ord, Generic)
+
+instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (HHT v n a)
 
 -- | Directly compute the Hilbert-Huang transform of a given time series.
 -- Essentially is a composition of 'hhtEmd' and 'emd'.  See 'hhtEmd' for

@@ -1,6 +1,20 @@
 Changelog
 =========
 
+Version 0.1.3.0
+---------------
+
+*August 15, 2018*
+
+<https://github.com/mstksg/emd/releases/tag/v0.1.3.0>
+
+*   `Default` instance for `SiftCondition` and `EMDOpts`, as a useful
+    alternative to `defaultEO` and `defaultSC` for those who prefer it.
+*   `Binary` instances for `EMD`, `HHT`, and related data types.  These are
+    based on `Binary` instance for `v a`, so the user must bring the orphan
+    instance of their choice into scope.  Not sure if this is the best way to
+    do this.
+
 Version 0.1.2.1
 ---------------
 

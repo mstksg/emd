@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns                             #-}
+{-# LANGUAGE DeriveGeneric                            #-}
 {-# LANGUAGE GADTs                                    #-}
 {-# LANGUAGE LambdaCase                               #-}
 {-# LANGUAGE RecordWildCards                          #-}
@@ -51,12 +52,15 @@ module Numeric.EMD (
 
 import           Control.Monad
 import           Control.Monad.IO.Class
+import           Data.Default.Class
 import           Data.Finite
 import           Data.Functor.Identity
+import           GHC.Generics                 (Generic)
 import           GHC.TypeNats
 import           Numeric.EMD.Internal.Extrema
 import           Numeric.EMD.Internal.Spline
 import           Text.Printf
+import qualified Data.Binary                  as Bi
 import qualified Data.Map                     as M
 import qualified Data.Vector.Generic          as VG
 import qualified Data.Vector.Generic.Sized    as SVG
@@ -66,17 +70,20 @@ data EMDOpts a = EO { eoSiftCondition   :: SiftCondition a  -- ^ stop condition 
                     , eoSplineEnd       :: SplineEnd a      -- ^ end conditions for envelope splines
                     , eoBoundaryHandler :: Maybe BoundaryHandler  -- ^ process for handling boundary
                     }
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
 
 data BoundaryHandler
     -- | Clamp envelope at end points (Matlab implementation)
     = BHClamp
     -- | Extend boundaries symmetrically
     | BHSymmetric
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
 
     -- -- | Extend boundaries assuming global periodicity
     -- -- | BHPeriodic
+
+instance Bi.Binary BoundaryHandler
+instance Bi.Binary a => Bi.Binary (EMDOpts a)
 
 -- | Default 'EMDOpts'
 defaultEO :: Fractional a => EMDOpts a
@@ -85,7 +92,22 @@ defaultEO = EO { eoSiftCondition   = defaultSC
                , eoBoundaryHandler = Just BHSymmetric
                }
 
+instance Fractional a => Default (EMDOpts a) where
+    def = defaultEO
+
 -- | Stop conditions for sifting process
+--
+-- Data type is lazy in its fields, so this infinite data type:
+--
+-- @
+-- nTimes n = SCTimes n `SCOr` nTimes (n + 1)
+-- @
+--
+-- will be treated identically as:
+--
+-- @
+-- nTimes = SCTimes
+-- @
 data SiftCondition a
     -- | Stop using standard SD method
     = SCStdDev !a
@@ -95,11 +117,15 @@ data SiftCondition a
     | SCOr (SiftCondition a) (SiftCondition a)
     -- | Stop when both conditions are met
     | SCAnd (SiftCondition a) (SiftCondition a)
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
+
+instance Bi.Binary a => Bi.Binary (SiftCondition a)
+instance Fractional a => Default (SiftCondition a) where
+    def = defaultSC
 
 -- | Default 'SiftCondition'
 defaultSC :: Fractional a => SiftCondition a
-defaultSC = SCStdDev 0.3 `SCOr` SCTimes 100     -- R package uses SCTimes 20, Matlab uses no limit
+defaultSC = SCStdDev 0.3 `SCOr` SCTimes 50     -- R package uses SCTimes 20, Matlab uses no limit
 -- defaultSC = SCStdDev 0.3
 
 -- | 'True' if stop
@@ -128,7 +154,15 @@ testCondition tc i v v' = go tc
 data EMD v n a = EMD { emdIMFs     :: ![SVG.Vector v n a]
                      , emdResidual :: !(SVG.Vector v n a)
                      }
-  deriving Show
+  deriving (Show, Generic, Eq, Ord)
+
+instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (EMD v n a) where
+    put EMD{..} = Bi.put (SVG.fromSized <$> emdIMFs)
+               *> Bi.put (SVG.fromSized emdResidual)
+    get = do
+      Just emdIMFs     <- traverse SVG.toSized <$> Bi.get
+      Just emdResidual <- SVG.toSized <$> Bi.get
+      pure EMD{..}
 
 -- | EMD decomposition of a given time series with a given sifting stop
 -- condition.
