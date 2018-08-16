@@ -30,7 +30,7 @@ module Numeric.HHT (
     HHT(..), HHTLine(..)
   , hhtEmd
   , hht
-  , hhtSpectrum, transposeSpectrum
+  , hhtSpectrum, hhtSpectrumT
   , marginal, instantaneousEnergy, degreeOfStationarity
   -- ** Options
   , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
@@ -51,8 +51,6 @@ import           GHC.TypeNats
 import           Numeric.EMD
 import qualified Data.Binary               as Bi
 import qualified Data.Map                  as M
-import qualified Data.Set                  as S
-import qualified Data.Vector               as V
 import qualified Data.Vector.Generic       as VG
 import qualified Data.Vector.Generic.Sized as SVG
 import qualified Data.Vector.Sized         as SV
@@ -66,6 +64,7 @@ data HHTLine v n a = HHTLine
     }
   deriving (Show, Eq, Ord, Generic)
 
+-- | @since 0.1.3.0
 instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (HHTLine v n a) where
     put HHTLine{..} = Bi.put (SVG.fromSized hlMags )
                    *> Bi.put (SVG.fromSized hlFreqs)
@@ -82,6 +81,7 @@ instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (HHTLine v n 
 newtype HHT v n a = HHT { hhtLines :: [HHTLine v n a] }
   deriving (Show, Eq, Ord, Generic)
 
+-- | @since 0.1.3.0
 instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (HHT v n a)
 
 -- | Directly compute the Hilbert-Huang transform of a given time series.
@@ -111,34 +111,66 @@ hhtEmd EMD{..} = HHT $ map go emdIMFs
 --
 -- Takes a "binning" function to allow you to specify how specific you want
 -- your frequencies to be.
+--
+-- See 'httSpectrumT' for a verson with a "transposed" result.
 hhtSpectrum
-    :: forall n a k. (KnownNat n, Ord k, Num a)
+    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Num a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
-    -> HHT V.Vector n a
+    -> HHT v n a
     -> SV.Vector n (M.Map k a)
 hhtSpectrum f = foldl' ((SV.zipWith . M.unionWith) (+)) (pure mempty) . map go . hhtLines
   where
-    go :: HHTLine V.Vector n a -> SV.Vector n (M.Map k a)
+    go :: HHTLine v n a -> SV.Vector n (M.Map k a)
     go HHTLine{..} = SV.generate $ \i ->
       M.singleton (f $ hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
 
--- | "Transpose" the result of 'hhtSpectrum', returning a map of
--- frequencies and their associated (sparse) power time series.
-transposeSpectrum
-    :: forall n a k. (Ord k, Num a)
-    => SV.Vector n (M.Map k a)
+-- | A "transposed" vesion of 'hhtSpectrum'.  Compute the full
+-- Hilbert-Huang Transform spectrum.  Returns a map of the/sparse/ power
+-- time series associated with each frequency.  Each frequency contains
+-- a @'M.Map' ('Finite' n) a@, a map assocating times (the @'Finite' n@) to
+-- the power at that time at that frequency.
+--
+-- Takes a "binning" function to allow you to specify how specific you want
+-- your frequencies to be.
+--
+-- Note its relationship to the marginal power spectrum, 'marginal':
+--
+-- @
+-- 'marginal' f = 'fmap' 'sum' . 'hhtSpectrumT' f
+-- @
+--
+-- Where 'marginal' acts like a fourier transform (giving the total power
+-- over the entire time series for every frequency), 'hhtSpectrumT' can be
+-- thought of as giving the /temporal/ localizations of all contributions
+-- of power from a given frequency.
+--
+-- @since 0.1.4.0
+hhtSpectrumT
+    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Num a)
+    => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
+    -> HHT v n a
     -> M.Map k (M.Map (Finite n) a)
-transposeSpectrum xs = M.fromSet go allKeys
+hhtSpectrumT f = M.unionsWith (M.unionWith (+)) . concatMap go . hhtLines
   where
-    go :: k -> M.Map (Finite n) a
-    go k = M.unionsWith (+) . SV.toList . flip SV.imap xs $ \i m ->
-        maybe mempty (M.singleton i) $ M.lookup k m
-    allKeys :: S.Set k
-    allKeys = foldMap M.keysSet xs
+    go :: HHTLine v n a -> [M.Map k (M.Map (Finite n) a)]
+    go HHTLine{..} = flip fmap (finites @n) $ \i ->
+      M.singleton (f $ hlFreqs `SVG.index` i) $
+        M.singleton i (hlMags `SVG.index` i)
 
--- | Compute the marginal spectrum given a Hilbert-Huang Transform.
+-- | Compute the marginal spectrum given a Hilbert-Huang Transform. It is
+-- similar to a Fourier Transform; it provides the "total power" over the
+-- entire time series for each frequency component.
+--
 -- A binning function is accepted to allow you to specify how specific you
 -- want your frequencies to be.
+--
+-- Note the relationship to 'hhtSpectrumT':
+--
+-- @
+-- 'marginal' f = 'fmap' 'sum' . 'hhtSpectrumT' f
+-- @
+--
+-- It sums over the entire time series for every frequency.
 marginal
     :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Num a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.

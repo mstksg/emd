@@ -82,7 +82,10 @@ data BoundaryHandler
     -- -- | Extend boundaries assuming global periodicity
     -- -- | BHPeriodic
 
+-- | @since 0.1.3.0
 instance Bi.Binary BoundaryHandler
+
+-- | @since 0.1.3.0
 instance Bi.Binary a => Bi.Binary (EMDOpts a)
 
 -- | Default 'EMDOpts'
@@ -92,6 +95,7 @@ defaultEO = EO { eoSiftCondition   = defaultSC
                , eoBoundaryHandler = Just BHSymmetric
                }
 
+-- | @since 0.1.3.0
 instance Fractional a => Default (EMDOpts a) where
     def = defaultEO
 
@@ -119,7 +123,10 @@ data SiftCondition a
     | SCAnd (SiftCondition a) (SiftCondition a)
   deriving (Show, Eq, Ord, Generic)
 
+-- | @since 0.1.3.0
 instance Bi.Binary a => Bi.Binary (SiftCondition a)
+
+-- | @since 0.1.3.0
 instance Fractional a => Default (SiftCondition a) where
     def = defaultSC
 
@@ -156,6 +163,7 @@ data EMD v n a = EMD { emdIMFs     :: ![SVG.Vector v n a]
                      }
   deriving (Show, Generic, Eq, Ord)
 
+-- | @since 0.1.3.0
 instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (EMD v n a) where
     put EMD{..} = Bi.put (SVG.fromSized <$> emdIMFs)
                *> Bi.put (SVG.fromSized emdResidual)

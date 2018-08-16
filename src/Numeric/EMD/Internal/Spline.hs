@@ -56,6 +56,7 @@ data SplineEnd a
     | SEClamped a a
   deriving (Show, Eq, Ord, Generic)
 
+-- | @since 0.1.3.0
 instance Bi.Binary a => Bi.Binary (SplineEnd a)
 
 data SplineCoef a = SC { _scAlpha  :: !a      -- ^ a
