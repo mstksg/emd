@@ -7,7 +7,7 @@
 --   Please see the README on GitHub at
 --   <a>https://github.com/mstksg/emd#readme</a>
 @package emd
-@version 0.1.3.0
+@version 0.1.4.0
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -213,35 +213,6 @@ instance Data.Binary.Class.Binary Numeric.EMD.BoundaryHandler
 --   vectors to sized vectors.
 module Numeric.HHT
 
--- | Compute the Hilbert-Huang transform from a given Empirical Mode
---   Decomposition.
-hhtEmd :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMD v (n + 1) a -> HHT v n a
-
--- | Directly compute the Hilbert-Huang transform of a given time series.
---   Essentially is a composition of <a>hhtEmd</a> and <a>emd</a>. See
---   <a>hhtEmd</a> for a more flexible version.
-hht :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMDOpts a -> Vector v (n + 1) a -> HHT v n a
-
--- | Compute the full Hilbert-Huang Transform spectrum. At each timestep is
---   a sparse map of frequency components and their respective magnitudes.
---   Frequencies not in the map are considered to be zero.
---   
---   Takes a "binning" function to allow you to specify how specific you
---   want your frequencies to be.
-hhtSpectrum :: forall n a k. (KnownNat n, Ord k, Num a) => (a -> k) -> HHT Vector n a -> Vector n (Map k a)
-
--- | Compute the marginal spectrum given a Hilbert-Huang Transform. A
---   binning function is accepted to allow you to specify how specific you
---   want your frequencies to be.
-marginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Map k a
-
--- | Compute the instantaneous energy of the time series at every step via
---   the Hilbert-Huang Transform.
-instantaneousEnergy :: forall v n a. (Vector v a, KnownNat n, Num a) => HHT v n a -> Vector v n a
-
--- | Degree of stationarity, as a function of frequency.
-degreeOfStationarity :: forall v n a k. (Vector v a, KnownNat n, Ord k, Fractional a) => (a -> k) -> HHT v n a -> Map k a
-
 -- | A Hilbert-Huang Transform. An <tt><a>HHT</a> v n a</tt> is a
 --   Hilbert-Huang transform of an <tt>n</tt>-item time series of items of
 --   type <tt>a</tt> represented using vector <tt>v</tt>.
@@ -260,6 +231,39 @@ HHTLine :: !(Vector v n a) -> !(Vector v n a) -> HHTLine v n a
 
 -- | IMF HHT instantaneous frequency as a time series (between 0 and 1)
 [hlFreqs] :: HHTLine v n a -> !(Vector v n a)
+
+-- | Compute the Hilbert-Huang transform from a given Empirical Mode
+--   Decomposition.
+hhtEmd :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMD v (n + 1) a -> HHT v n a
+
+-- | Directly compute the Hilbert-Huang transform of a given time series.
+--   Essentially is a composition of <a>hhtEmd</a> and <a>emd</a>. See
+--   <a>hhtEmd</a> for a more flexible version.
+hht :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMDOpts a -> Vector v (n + 1) a -> HHT v n a
+
+-- | Compute the full Hilbert-Huang Transform spectrum. At each timestep is
+--   a sparse map of frequency components and their respective magnitudes.
+--   Frequencies not in the map are considered to be zero.
+--   
+--   Takes a "binning" function to allow you to specify how specific you
+--   want your frequencies to be.
+hhtSpectrum :: forall n a k. (KnownNat n, Ord k, Num a) => (a -> k) -> HHT Vector n a -> Vector n (Map k a)
+
+-- | <a>Transpose</a> the result of <a>hhtSpectrum</a>, returning a map of
+--   frequencies and their associated (sparse) power time series.
+transposeSpectrum :: forall n a k. (Ord k, Num a) => Vector n (Map k a) -> Map k (Map (Finite n) a)
+
+-- | Compute the marginal spectrum given a Hilbert-Huang Transform. A
+--   binning function is accepted to allow you to specify how specific you
+--   want your frequencies to be.
+marginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Map k a
+
+-- | Compute the instantaneous energy of the time series at every step via
+--   the Hilbert-Huang Transform.
+instantaneousEnergy :: forall v n a. (Vector v a, KnownNat n, Num a) => HHT v n a -> Vector v n a
+
+-- | Degree of stationarity, as a function of frequency.
+degreeOfStationarity :: forall v n a k. (Vector v a, KnownNat n, Ord k, Fractional a) => (a -> k) -> HHT v n a -> Map k a
 
 -- | Options for EMD composition.
 data EMDOpts a
