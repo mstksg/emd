@@ -247,15 +247,46 @@ hht :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMDOpts a -> Vecto
 --   
 --   Takes a "binning" function to allow you to specify how specific you
 --   want your frequencies to be.
-hhtSpectrum :: forall n a k. (KnownNat n, Ord k, Num a) => (a -> k) -> HHT Vector n a -> Vector n (Map k a)
+--   
+--   See <tt>httSpectrumT</tt> for a verson with a "transposed" result.
+hhtSpectrum :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Vector n (Map k a)
 
--- | <a>Transpose</a> the result of <a>hhtSpectrum</a>, returning a map of
---   frequencies and their associated (sparse) power time series.
-transposeSpectrum :: forall n a k. (Ord k, Num a) => Vector n (Map k a) -> Map k (Map (Finite n) a)
-
--- | Compute the marginal spectrum given a Hilbert-Huang Transform. A
---   binning function is accepted to allow you to specify how specific you
+-- | A "transposed" vesion of <a>hhtSpectrum</a>. Compute the full
+--   Hilbert-Huang Transform spectrum. Returns a map of the<i>sparse</i>
+--   power time series associated with each frequency. Each frequency
+--   contains a <tt><a>Map</a> (<a>Finite</a> n) a</tt>, a map assocating
+--   times (the <tt><a>Finite</a> n</tt>) to the power at that time at that
+--   frequency.
+--   
+--   Takes a "binning" function to allow you to specify how specific you
 --   want your frequencies to be.
+--   
+--   Note its relationship to the marginal power spectrum, <a>marginal</a>:
+--   
+--   <pre>
+--   <a>marginal</a> f = <a>fmap</a> <a>sum</a> . <a>hhtSpectrumT</a> f
+--   </pre>
+--   
+--   Where <a>marginal</a> acts like a fourier transform (giving the total
+--   power over the entire time series for every frequency),
+--   <a>hhtSpectrumT</a> can be thought of as giving the <i>temporal</i>
+--   localizations of all contributions of power from a given frequency.
+hhtSpectrumT :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Map k (Map (Finite n) a)
+
+-- | Compute the marginal spectrum given a Hilbert-Huang Transform. It is
+--   similar to a Fourier Transform; it provides the "total power" over the
+--   entire time series for each frequency component.
+--   
+--   A binning function is accepted to allow you to specify how specific
+--   you want your frequencies to be.
+--   
+--   Note the relationship to <a>hhtSpectrumT</a>:
+--   
+--   <pre>
+--   <a>marginal</a> f = <a>fmap</a> <a>sum</a> . <a>hhtSpectrumT</a> f
+--   </pre>
+--   
+--   It sums over the entire time series for every frequency.
 marginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Map k a
 
 -- | Compute the instantaneous energy of the time series at every step via
