@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.1.4.0
+---------------
+
+*Unreleased*
+
+<https://github.com/mstksg/emd/releases/tag/v0.1.4.0>
+
+*   `transposeSpectrum` added to *Numeric.HHT* module, for an alternate
+    representation of the Hilbert Spectrum.
+
 Version 0.1.3.0
 ---------------
 

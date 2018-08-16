@@ -26,11 +26,13 @@
 -- @since 0.1.2.0
 
 module Numeric.HHT (
-    hhtEmd
+  -- * Hilbert-Huang Transform
+    HHT(..), HHTLine(..)
+  , hhtEmd
   , hht
-  , hhtSpectrum
+  , hhtSpectrum, transposeSpectrum
   , marginal, instantaneousEnergy, degreeOfStationarity
-  , HHT(..), HHTLine(..)
+  -- ** Options
   , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
   -- * Hilbert transforms (internal usage)
   , hilbert
@@ -41,7 +43,7 @@ module Numeric.HHT (
 import           Data.Complex
 import           Data.Finite
 import           Data.Fixed
-import           Data.List
+import           Data.Foldable
 import           Data.Proxy
 import           Data.Semigroup
 import           GHC.Generics              (Generic)
@@ -49,6 +51,7 @@ import           GHC.TypeNats
 import           Numeric.EMD
 import qualified Data.Binary               as Bi
 import qualified Data.Map                  as M
+import qualified Data.Set                  as S
 import qualified Data.Vector               as V
 import qualified Data.Vector.Generic       as VG
 import qualified Data.Vector.Generic.Sized as SVG
@@ -118,6 +121,20 @@ hhtSpectrum f = foldl' ((SV.zipWith . M.unionWith) (+)) (pure mempty) . map go .
     go :: HHTLine V.Vector n a -> SV.Vector n (M.Map k a)
     go HHTLine{..} = SV.generate $ \i ->
       M.singleton (f $ hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
+
+-- | "Transpose" the result of 'hhtSpectrum', returning a map of
+-- frequencies and their associated (sparse) power time series.
+transposeSpectrum
+    :: forall n a k. (Ord k, Num a)
+    => SV.Vector n (M.Map k a)
+    -> M.Map k (M.Map (Finite n) a)
+transposeSpectrum xs = M.fromSet go allKeys
+  where
+    go :: k -> M.Map (Finite n) a
+    go k = M.unionsWith (+) . SV.toList . flip SV.imap xs $ \i m ->
+        maybe mempty (M.singleton i) $ M.lookup k m
+    allKeys :: S.Set k
+    allKeys = foldMap M.keysSet xs
 
 -- | Compute the marginal spectrum given a Hilbert-Huang Transform.
 -- A binning function is accepted to allow you to specify how specific you
