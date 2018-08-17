@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns                             #-}
 {-# LANGUAGE DataKinds                                #-}
 {-# LANGUAGE DeriveGeneric                            #-}
 {-# LANGUAGE FlexibleContexts                         #-}
@@ -32,6 +33,7 @@ module Numeric.HHT (
   , hht
   , hhtSpectrum, hhtSpectrumT
   , marginal, instantaneousEnergy, degreeOfStationarity
+  , expectedFreq
   -- ** Options
   , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
   -- * Hilbert transforms (internal usage)
@@ -181,6 +183,30 @@ marginal f = M.unionsWith (+) . concatMap go . hhtLines
     go :: HHTLine v n a -> [M.Map k a]
     go HHTLine{..} = flip fmap (finites @n) $ \i ->
       M.singleton (f $ hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
+
+-- | Returns the "expected value" of frequency at each time step,
+-- calculated as a weighted average of all contributions at every frequency
+-- at that time step.
+--
+-- Essentially selects the dominant frequency at each time step.
+--
+-- @since 0.1.4.0
+expectedFreq
+    :: forall v n a. (VG.Vector v a, KnownNat n, Fractional a)
+    => HHT v n a
+    -> SVG.Vector v n a
+expectedFreq HHT{..} = SVG.generate $ \i -> weightedAverage . map (go i) $ hhtLines
+  where
+    go :: Finite n -> HHTLine v n a -> (a, a)
+    go i HHTLine{..} = (hlFreqs `SVG.index` i, hlMags `SVG.index` i)
+
+weightedAverage
+    :: (Foldable t, Fractional a)
+    => t (a, a)
+    -> a
+weightedAverage = uncurry (/) . foldl' go (0, 0)
+  where
+    go (!sx, !sw) (!x, !w) = (sx + x, sw + w)
 
 -- | Compute the instantaneous energy of the time series at every step via
 -- the Hilbert-Huang Transform.

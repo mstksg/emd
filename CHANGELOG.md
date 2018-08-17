@@ -10,6 +10,8 @@ Version 0.1.4.0
 
 *   `hhtSpetrumT` added to *Numeric.HHT* module, for an alternate
     representation of the Hilbert Spectrum.
+*   `expectedFrequency` added to *Numeric.HHT* module, to calculate dominating
+    frequency contribution at each step in time.
 
 Version 0.1.3.0
 ---------------
