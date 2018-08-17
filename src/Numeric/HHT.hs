@@ -31,9 +31,11 @@ module Numeric.HHT (
     HHT(..), HHTLine(..)
   , hhtEmd
   , hht
-  , hhtSpectrum, hhtSparseSpectrum
+  -- ** Hilbert-Huang Spectrum
+  , hhtSpectrum, hhtSparseSpectrum, hhtDenseSpectrum
+  -- ** Properties of spectrum
   , marginal, instantaneousEnergy, degreeOfStationarity
-  , expectedFreq
+  , expectedFreq, dominantFreq
   -- ** Options
   , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
   -- * Hilbert transforms (internal usage)
@@ -46,12 +48,14 @@ import           Data.Complex
 import           Data.Finite
 import           Data.Fixed
 import           Data.Foldable
+import           Data.Maybe
 import           Data.Proxy
 import           Data.Semigroup
 import           GHC.Generics              (Generic)
 import           GHC.TypeNats
 import           Numeric.EMD
 import qualified Data.Binary               as Bi
+import qualified Data.List.NonEmpty        as NE
 import qualified Data.Map                  as M
 import qualified Data.Vector.Generic       as VG
 import qualified Data.Vector.Generic.Sized as SVG
@@ -114,7 +118,8 @@ hhtEmd EMD{..} = HHT $ map go emdIMFs
 -- Takes a "binning" function to allow you to specify how specific you want
 -- your frequencies to be.
 --
--- See 'httSpectrumT' for a verson with a "transposed" result.
+-- See 'hhtSparseSpetrum' for a sparser version, and 'hhtDenseSpectrum' for
+-- a denser version.
 hhtSpectrum
     :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Num a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
@@ -126,7 +131,7 @@ hhtSpectrum f = foldl' ((SV.zipWith . M.unionWith) (+)) (pure mempty) . map go .
     go HHTLine{..} = SV.generate $ \i ->
       M.singleton (f $ hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
 
--- | A sparse vesion of 'hhtSpectrum'.  Compute the full Hilbert-Huang
+-- | A sparser vesion of 'hhtSpectrum'.  Compute the full Hilbert-Huang
 -- Transform spectrum.  Returns a /sparse/ matrix representing the power at
 -- each time step (the @'Finite' n@) and frequency (the @k@).
 --
@@ -145,6 +150,24 @@ hhtSparseSpectrum f = M.unionsWith (+) . concatMap go . hhtLines
     go HHTLine{..} = flip fmap (finites @n) $ \i ->
       M.singleton (i, f $ hlFreqs `SVG.index` i) $
         hlMags `SVG.index` i
+
+-- | A denser version of 'hhtSpectrum'.  Compute the full  Hilbert-Huang
+-- Transform spectrum, returning a dense matrix (as a vector of vectors)
+-- representing the power at each time step and each frequency.
+--
+-- Takes a "binning" function that maps a frequency to one of @m@ discrete
+-- slots, for accumulation in the dense matrix.
+--
+-- @since 0.1.4.0
+hhtDenseSpectrum
+    :: forall v n m a. (VG.Vector v a, KnownNat n, KnownNat m, Num a)
+    => (a -> Finite m)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
+    -> HHT v n a
+    -> SV.Vector n (SV.Vector m a)
+hhtDenseSpectrum f h = SV.generate $ \i -> SV.generate $ \j ->
+    M.findWithDefault 0 (i, j) ss
+  where
+    ss = hhtSparseSpectrum f h
 
 -- | Compute the marginal spectrum given a Hilbert-Huang Transform. It is
 -- similar to a Fourier Transform; it provides the "total power" over the
@@ -167,8 +190,6 @@ marginal f = M.unionsWith (+) . concatMap go . hhtLines
 -- calculated as a weighted average of all contributions at every frequency
 -- at that time step.
 --
--- Essentially selects the dominant frequency at each time step.
---
 -- @since 0.1.4.0
 expectedFreq
     :: forall v n a. (VG.Vector v a, KnownNat n, Fractional a)
@@ -186,6 +207,26 @@ weightedAverage
 weightedAverage = uncurry (/) . foldl' go (0, 0)
   where
     go (!sx, !sw) (!x, !w) = (sx + x, sw + w)
+
+-- | Returns the dominant frequency (frequency with largest magnitude
+-- contribution) at each time step.
+-- 
+-- @since 0.1.4.0
+dominantFreq
+    :: forall v n a. (VG.Vector v a, KnownNat n, Ord a)
+    => HHT v n a
+    -> SVG.Vector v n a
+dominantFreq HHT{..} = SVG.generate $ \i -> (\(Max (Arg _ x)) -> x)
+                                          . sconcat
+                                          . fromMaybe err
+                                          . NE.nonEmpty
+                                          . map (go i)
+                                          $ hhtLines
+  where
+    go :: Finite n -> HHTLine v n a -> ArgMax a a
+    go i HHTLine{..} = Max $ Arg (hlMags  `SVG.index` i)
+                                 (hlFreqs `SVG.index` i)
+    err = errorWithoutStackTrace "Numeric.HHT.dominantFreq: HHT was formed with no Intrinsic Mode Functions"
 
 -- | Compute the instantaneous energy of the time series at every step via
 -- the Hilbert-Huang Transform.
