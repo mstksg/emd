@@ -8,7 +8,7 @@ Version 0.1.4.0
 
 <https://github.com/mstksg/emd/releases/tag/v0.1.4.0>
 
-*   `hhtSpetrumT` added to *Numeric.HHT* module, for an alternate
+*   `hhSparseSpectrum` added to *Numeric.HHT* module, for an alternate sparse
     representation of the Hilbert Spectrum.
 *   `expectedFrequency` added to *Numeric.HHT* module, to calculate dominating
     frequency contribution at each step in time.
