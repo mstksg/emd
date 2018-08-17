@@ -248,30 +248,26 @@ hht :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMDOpts a -> Vecto
 --   Takes a "binning" function to allow you to specify how specific you
 --   want your frequencies to be.
 --   
---   See <tt>httSpectrumT</tt> for a verson with a "transposed" result.
+--   See <tt>hhtSparseSpetrum</tt> for a sparser version, and
+--   <a>hhtDenseSpectrum</a> for a denser version.
 hhtSpectrum :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Vector n (Map k a)
 
--- | A "transposed" vesion of <a>hhtSpectrum</a>. Compute the full
---   Hilbert-Huang Transform spectrum. Returns a map of the<i>sparse</i>
---   power time series associated with each frequency. Each frequency
---   contains a <tt><a>Map</a> (<a>Finite</a> n) a</tt>, a map assocating
---   times (the <tt><a>Finite</a> n</tt>) to the power at that time at that
---   frequency.
+-- | A sparser vesion of <a>hhtSpectrum</a>. Compute the full Hilbert-Huang
+--   Transform spectrum. Returns a <i>sparse</i> matrix representing the
+--   power at each time step (the <tt><a>Finite</a> n</tt>) and frequency
+--   (the <tt>k</tt>).
 --   
 --   Takes a "binning" function to allow you to specify how specific you
 --   want your frequencies to be.
+hhtSparseSpectrum :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Map (Finite n, k) a
+
+-- | A denser version of <a>hhtSpectrum</a>. Compute the full Hilbert-Huang
+--   Transform spectrum, returning a dense matrix (as a vector of vectors)
+--   representing the power at each time step and each frequency.
 --   
---   Note its relationship to the marginal power spectrum, <a>marginal</a>:
---   
---   <pre>
---   <a>marginal</a> f = <a>fmap</a> <a>sum</a> . <a>hhtSpectrumT</a> f
---   </pre>
---   
---   Where <a>marginal</a> acts like a fourier transform (giving the total
---   power over the entire time series for every frequency),
---   <a>hhtSpectrumT</a> can be thought of as giving the <i>temporal</i>
---   localizations of all contributions of power from a given frequency.
-hhtSpectrumT :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Map k (Map (Finite n) a)
+--   Takes a "binning" function that maps a frequency to one of <tt>m</tt>
+--   discrete slots, for accumulation in the dense matrix.
+hhtDenseSpectrum :: forall v n m a. (Vector v a, KnownNat n, KnownNat m, Num a) => (a -> Finite m) -> HHT v n a -> Vector n (Vector m a)
 
 -- | Compute the marginal spectrum given a Hilbert-Huang Transform. It is
 --   similar to a Fourier Transform; it provides the "total power" over the
@@ -279,14 +275,6 @@ hhtSpectrumT :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> 
 --   
 --   A binning function is accepted to allow you to specify how specific
 --   you want your frequencies to be.
---   
---   Note the relationship to <a>hhtSpectrumT</a>:
---   
---   <pre>
---   <a>marginal</a> f = <a>fmap</a> <a>sum</a> . <a>hhtSpectrumT</a> f
---   </pre>
---   
---   It sums over the entire time series for every frequency.
 marginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Map k a
 
 -- | Compute the instantaneous energy of the time series at every step via
@@ -299,9 +287,11 @@ degreeOfStationarity :: forall v n a k. (Vector v a, KnownNat n, Ord k, Fraction
 -- | Returns the "expected value" of frequency at each time step,
 --   calculated as a weighted average of all contributions at every
 --   frequency at that time step.
---   
---   Essentially selects the dominant frequency at each time step.
 expectedFreq :: forall v n a. (Vector v a, KnownNat n, Fractional a) => HHT v n a -> Vector v n a
+
+-- | Returns the dominant frequency (frequency with largest magnitude
+--   contribution) at each time step.
+dominantFreq :: forall v n a. (Vector v a, KnownNat n, Ord a) => HHT v n a -> Vector v n a
 
 -- | Options for EMD composition.
 data EMDOpts a
