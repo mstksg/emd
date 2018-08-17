@@ -296,6 +296,13 @@ instantaneousEnergy :: forall v n a. (Vector v a, KnownNat n, Num a) => HHT v n 
 -- | Degree of stationarity, as a function of frequency.
 degreeOfStationarity :: forall v n a k. (Vector v a, KnownNat n, Ord k, Fractional a) => (a -> k) -> HHT v n a -> Map k a
 
+-- | Returns the "expected value" of frequency at each time step,
+--   calculated as a weighted average of all contributions at every
+--   frequency at that time step.
+--   
+--   Essentially selects the dominant frequency at each time step.
+expectedFreq :: forall v n a. (Vector v a, KnownNat n, Fractional a) => HHT v n a -> Vector v n a
+
 -- | Options for EMD composition.
 data EMDOpts a
 EO :: SiftCondition a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts a
