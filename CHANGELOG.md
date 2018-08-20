@@ -4,7 +4,7 @@ Changelog
 Version 0.1.4.0
 ---------------
 
-*Unreleased*
+*August 20, 2018*
 
 <https://github.com/mstksg/emd/releases/tag/v0.1.4.0>
 
