@@ -30,6 +30,7 @@ ghc-options:
 - -Wredundant-constraints
 - -Wcompat
 
+
 library:
   source-dirs: src
   other-modules:
