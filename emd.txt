@@ -95,9 +95,9 @@ emd' :: (Vector v a, KnownNat n, Fractional a, Ord a, Applicative m) => (SiftRes
 --   The component-wise sum of <a>emdIMFs</a> and <a>emdResidual</a> should
 --   yield exactly the original series.
 data EMD v n a
-EMD :: ![Vector v n a] -> !(Vector v n a) -> EMD v n a
+EMD :: ![Vector v n a] -> !Vector v n a -> EMD v n a
 [emdIMFs] :: EMD v n a -> ![Vector v n a]
-[emdResidual] :: EMD v n a -> !(Vector v n a)
+[emdResidual] :: EMD v n a -> !Vector v n a
 
 -- | Options for EMD composition.
 data EMDOpts a
@@ -144,10 +144,10 @@ SCStdDev :: !a -> SiftCondition a
 SCTimes :: !Int -> SiftCondition a
 
 -- | One or the other
-SCOr :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
+SCOr :: SiftCondition a -> SiftCondition a -> SiftCondition a
 
 -- | Stop when both conditions are met
-SCAnd :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
+SCAnd :: SiftCondition a -> SiftCondition a -> SiftCondition a
 
 -- | Default <a>SiftCondition</a>
 defaultSC :: Fractional a => SiftCondition a
@@ -172,10 +172,10 @@ sift :: (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (
 -- | The result of a sifting operation. Each sift either yields a residual,
 --   or a new IMF.
 data SiftResult v n a
-SRResidual :: !(Vector v n a) -> SiftResult v n a
+SRResidual :: !Vector v n a -> SiftResult v n a
 
 -- | number of sifting iterations
-SRIMF :: !(Vector v n a) -> !Int -> SiftResult v n a
+SRIMF :: !Vector v n a -> !Int -> SiftResult v n a
 
 -- | Returns cubic splines of local minimums and maximums. Returns
 --   <a>Nothing</a> if there are not enough local minimum or maximums to
@@ -224,13 +224,13 @@ HHT :: [HHTLine v n a] -> HHT v n a
 
 -- | A Hilbert Trasnform of a given IMF, given as a "skeleton line".
 data HHTLine v n a
-HHTLine :: !(Vector v n a) -> !(Vector v n a) -> HHTLine v n a
+HHTLine :: !Vector v n a -> !Vector v n a -> HHTLine v n a
 
 -- | IMF HHT Magnitude as a time series
-[hlMags] :: HHTLine v n a -> !(Vector v n a)
+[hlMags] :: HHTLine v n a -> !Vector v n a
 
 -- | IMF HHT instantaneous frequency as a time series (between 0 and 1)
-[hlFreqs] :: HHTLine v n a -> !(Vector v n a)
+[hlFreqs] :: HHTLine v n a -> !Vector v n a
 
 -- | Compute the Hilbert-Huang transform from a given Empirical Mode
 --   Decomposition.
@@ -338,10 +338,10 @@ SCStdDev :: !a -> SiftCondition a
 SCTimes :: !Int -> SiftCondition a
 
 -- | One or the other
-SCOr :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
+SCOr :: SiftCondition a -> SiftCondition a -> SiftCondition a
 
 -- | Stop when both conditions are met
-SCAnd :: (SiftCondition a) -> (SiftCondition a) -> SiftCondition a
+SCAnd :: SiftCondition a -> SiftCondition a -> SiftCondition a
 
 -- | Default <a>SiftCondition</a>
 defaultSC :: Fractional a => SiftCondition a
