@@ -27,7 +27,7 @@ packages:
     hackage: indexed-list-literals-0.2.1.2
 snapshots:
 - completed:
-    size: 512665
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2019/6/12.yaml
-    sha256: 990038bc481666609b856daaea428fcf66a443f797a1690be896c53aa8457386
-  original: nightly-2019-06-12
+    size: 513872
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2019/6/28.yaml
+    sha256: 60d99bc77de2ab71baaf7114873210155f84e8ae78350f113a1e6307a6b1995c
+  original: nightly-2019-06-28
