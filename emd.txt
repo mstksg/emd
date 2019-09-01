@@ -7,7 +7,7 @@
 --   Please see the README on GitHub at
 --   <a>https://github.com/mstksg/emd#readme</a>
 @package emd
-@version 0.1.4.0
+@version 0.1.5.0
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -88,12 +88,17 @@ emdTrace :: (Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m) => EMDOpts 
 -- | <a>emd</a> with a callback for each found IMF.
 emd' :: (Vector v a, KnownNat n, Fractional a, Ord a, Applicative m) => (SiftResult v (n + 1) a -> m r) -> EMDOpts a -> Vector v (n + 1) a -> m (EMD v (n + 1) a)
 
+-- | Collapse an <a>EMD</a> back into its original time series. Should be a
+--   left-inverse to <a>emd</a>: using <a>iemd</a> on the result of
+--   <a>emd</a> should give back the original vector.
+iemd :: (Vector v a, Num a) => EMD v n a -> Vector v n a
+
 -- | An <tt><a>EMD</a> v n a</tt> is an Empirical Mode Decomposition of a
 --   time series with <tt>n</tt> items of type <tt>a</tt> stored in a
 --   vector <tt>v</tt>.
 --   
 --   The component-wise sum of <a>emdIMFs</a> and <a>emdResidual</a> should
---   yield exactly the original series.
+--   yield exactly the original series (see <a>iemd</a>).
 data EMD v n a
 EMD :: ![Vector v n a] -> !Vector v n a -> EMD v n a
 [emdIMFs] :: EMD v n a -> ![Vector v n a]
@@ -197,6 +202,7 @@ instance GHC.Generics.Generic Numeric.EMD.BoundaryHandler
 instance GHC.Classes.Ord Numeric.EMD.BoundaryHandler
 instance GHC.Classes.Eq Numeric.EMD.BoundaryHandler
 instance GHC.Show.Show Numeric.EMD.BoundaryHandler
+instance Control.DeepSeq.NFData (v a) => Control.DeepSeq.NFData (Numeric.EMD.EMD v n a)
 instance (Data.Vector.Generic.Base.Vector v a, GHC.TypeNats.KnownNat n, Data.Binary.Class.Binary (v a)) => Data.Binary.Class.Binary (Numeric.EMD.EMD v n a)
 instance Data.Binary.Class.Binary a => Data.Binary.Class.Binary (Numeric.EMD.EMDOpts a)
 instance GHC.Real.Fractional a => Data.Default.Class.Default (Numeric.EMD.EMDOpts a)
