@@ -47,6 +47,7 @@ library:
   - typelits-witnesses
   - vector
   - vector-sized
+  - primitive
 
 tests:
   emd-test:

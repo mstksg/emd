@@ -54,19 +54,23 @@ module Numeric.EMD (
 import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.IO.Class
+import           Control.Monad.ST
 import           Data.Default.Class
+import           Control.Monad.Primitive
 import           Data.Finite
 import           Data.Functor.Identity
 import           Data.List
-import           GHC.Generics                 (Generic)
+import           GHC.Generics                      (Generic)
 import           GHC.TypeNats
 import           Numeric.EMD.Internal.Extrema
 import           Numeric.EMD.Internal.Spline
 import           Text.Printf
-import qualified Data.Binary                  as Bi
-import qualified Data.Map                     as M
-import qualified Data.Vector.Generic          as VG
-import qualified Data.Vector.Generic.Sized    as SVG
+import qualified Data.Binary                       as Bi
+import qualified Data.Map                          as M
+import qualified Data.Vector.Generic               as VG
+import qualified Data.Vector.Generic.Mutable       as MVG
+import qualified Data.Vector.Generic.Mutable.Sized as SMVG
+import qualified Data.Vector.Generic.Sized         as SVG
 
 -- | Options for EMD composition.
 data EMDOpts a = EO { eoSiftCondition   :: SiftCondition a  -- ^ stop condition for sifting
@@ -236,28 +240,39 @@ data SiftResult v n a = SRResidual !(SVG.Vector v n a)
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
 sift
-    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+    :: forall v n a. (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => EMDOpts a
     -> SVG.Vector v (n + 1) a
     -> SiftResult v (n + 1) a
-sift EO{..} = go 1
+sift EO{..} v0 = runST $ flip go 1 =<< SVG.thaw v0
   where
-    go !i !v = case sift' eoSplineEnd eoBoundaryHandler v of
-      Nothing -> SRResidual v
-      Just !v'
-        | testCondition eoSiftCondition i v v' -> SRIMF v' i
-        | otherwise                            -> go (i + 1) v'
+    go :: SVG.MVector (VG.Mutable v) (n + 1) s a -> Int -> ST s (SiftResult v (n + 1) a)
+    go mv !i = do
+      v    <- SVG.freeze mv
+      goOn <- sift' eoSplineEnd eoBoundaryHandler mv
+      v'   <- SVG.freeze mv
+      case goOn of
+        False -> pure $ SRResidual v'
+        True
+          | testCondition eoSiftCondition i v v' -> pure $ SRIMF v' i
+          | otherwise                            -> go mv (i + 1)
 
 -- | Single sift
+--
+-- Note that since version 0.1.5.0, this is now an in-place mutation
+-- instead of a pure function.
 sift'
-    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, PrimMonad m)
     => SplineEnd a
     -> Maybe BoundaryHandler
-    -> SVG.Vector v (n + 1) a
-    -> Maybe (SVG.Vector v (n + 1) a)
-sift' se bh v = go <$> envelopes se bh v
-  where
-    go (mins, maxs) = SVG.zipWith3 (\x mi ma -> x - (mi + ma)/2) v mins maxs
+    -> SVG.MVector (VG.Mutable v) (n + 1) (PrimState m) a
+    -> m Bool
+sift' se bh mv = (envelopes se bh <$> SVG.freeze mv) >>= \case
+    Nothing           -> pure False
+    Just (mins, maxs) -> True <$ do
+      forM_ finites $ \i ->
+        flip (SMVG.modify mv) i . subtract $
+          ((mins `SVG.index` i) + (maxs `SVG.index` i)) / 2
 
 -- | Returns cubic splines of local minimums and maximums.  Returns
 -- 'Nothing' if there are not enough local minimum or maximums to create
