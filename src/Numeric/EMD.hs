@@ -43,6 +43,7 @@ module Numeric.EMD (
     emd
   , emdTrace
   , emd'
+  , iemd
   , EMD(..)
   , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
   -- * Internal
@@ -50,11 +51,13 @@ module Numeric.EMD (
   , envelopes
   ) where
 
+import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Data.Default.Class
 import           Data.Finite
 import           Data.Functor.Identity
+import           Data.List
 import           GHC.Generics                 (Generic)
 import           GHC.TypeNats
 import           Numeric.EMD.Internal.Extrema
@@ -157,11 +160,14 @@ testCondition tc i v v' = go tc
 -- with @n@ items of type @a@ stored in a vector @v@.
 --
 -- The component-wise sum of 'emdIMFs' and 'emdResidual' should yield
--- exactly the original series.
+-- exactly the original series (see 'iemd').
 data EMD v n a = EMD { emdIMFs     :: ![SVG.Vector v n a]
                      , emdResidual :: !(SVG.Vector v n a)
                      }
   deriving (Show, Generic, Eq, Ord)
+
+-- | @since 0.1.5.0
+instance NFData (v a) => NFData (EMD v n a)
 
 -- | @since 0.1.3.0
 instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (EMD v n a) where
@@ -211,6 +217,17 @@ emd' cb eo = go id
         SRIMF v' _   -> go (imfs . (v':)) (v - v')
       where
         res = sift eo v
+
+-- | Collapse an 'EMD' back into its original time series.  Should be
+-- a left-inverse to 'emd': using 'iemd' on the result of 'emd' should give
+-- back the original vector.
+--
+-- @since 0.1.5.0
+iemd
+    :: (VG.Vector v a, Num a)
+    => EMD v n a
+    -> SVG.Vector v n a
+iemd EMD{..} = foldl' (SVG.zipWith (+)) emdResidual emdIMFs
 
 -- | The result of a sifting operation.  Each sift either yields
 -- a residual, or a new IMF.

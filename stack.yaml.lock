@@ -25,6 +25,13 @@ packages:
       sha256: 4e54f8d033a1f46333274ea3d1b9785c9e4fd225dcddc988c7a41353d9959cd5
   original:
     hackage: indexed-list-literals-0.2.1.2
+- completed:
+    hackage: pure-fft-0.2.0@sha256:1af30d9f06e42e1a8c1930faf0eac467fe91787556c99f8a8c920e1950c24c29,659
+    pantry-tree:
+      size: 211
+      sha256: 461363d5c37839fc03ac7a8130dae096869aba4582ab6757c2f50ddfb0094235
+  original:
+    hackage: pure-fft-0.2.0
 snapshots:
 - completed:
     size: 513872

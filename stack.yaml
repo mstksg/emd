@@ -43,6 +43,7 @@ extra-deps:
 - vector-sized-1.2.0.1
 - finite-typelits-0.1.4.2
 - indexed-list-literals-0.2.1.2
+- pure-fft-0.2.0
 
 build:
   haddock-arguments:
