@@ -44,6 +44,7 @@ module Numeric.HHT (
   , hilbertMagFreq
   ) where
 
+import           Control.DeepSeq
 import           Data.Complex
 import           Data.Finite
 import           Data.Fixed
@@ -79,6 +80,9 @@ instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (HHTLine v n 
       Just hlFreqs <- SVG.toSized <$> Bi.get
       pure HHTLine{..}
 
+-- | @since 0.1.5.0
+instance NFData (v a) => NFData (HHTLine v n a)
+
 -- | A Hilbert-Huang Transform.  An @'HHT' v n a@ is a Hilbert-Huang
 -- transform of an @n@-item time series of items of type @a@ represented
 -- using vector @v@.
@@ -89,6 +93,9 @@ newtype HHT v n a = HHT { hhtLines :: [HHTLine v n a] }
 
 -- | @since 0.1.3.0
 instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (HHT v n a)
+
+-- | @since 0.1.5.0
+instance NFData (v a) => NFData (HHT v n a)
 
 -- | Directly compute the Hilbert-Huang transform of a given time series.
 -- Essentially is a composition of 'hhtEmd' and 'emd'.  See 'hhtEmd' for
@@ -210,7 +217,7 @@ weightedAverage = uncurry (/) . foldl' go (0, 0)
 
 -- | Returns the dominant frequency (frequency with largest magnitude
 -- contribution) at each time step.
--- 
+--
 -- @since 0.1.4.0
 dominantFreq
     :: forall v n a. (VG.Vector v a, KnownNat n, Ord a)

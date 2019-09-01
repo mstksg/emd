@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.1.5.0
+---------------
+
+*August 31, 2019*
+
+<https://github.com/mstksg/emd/releases/tag/v0.1.5.0>
+
+*   Add `NFData` instance for `EMD`, `HHTLine`, and `HTT`
+*   Add `iemd`, inverting `emd`.
+
 Version 0.1.4.0
 ---------------
 
