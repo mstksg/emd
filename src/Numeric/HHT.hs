@@ -24,6 +24,12 @@
 -- 'hhtEmd'.  See "Numeric.EMD" for information on why this module uses
 -- "sized vectors", and how to convert unsized vectors to sized vectors.
 --
+-- Note that the Hilbert Transform implementation in this module is
+-- slightly naive and is essentially O(n^2) on the length of the vector.
+-- However, computation time for the full Hilbert-Huang Transform is
+-- typically dominated by Empirical Mode Docomposition, which is
+-- approximately O(n).
+--
 -- @since 0.1.2.0
 
 module Numeric.HHT (
