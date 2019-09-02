@@ -217,6 +217,12 @@ instance Data.Binary.Class.Binary Numeric.EMD.BoundaryHandler
 --   <a>hht</a> or <a>hhtEmd</a>. See <a>Numeric.EMD</a> for information on
 --   why this module uses "sized vectors", and how to convert unsized
 --   vectors to sized vectors.
+--   
+--   Note that the Hilbert Transform implementation in this module is
+--   slightly naive and is essentially O(n^2) on the length of the vector.
+--   However, computation time for the full Hilbert-Huang Transform is
+--   typically dominated by Empirical Mode Docomposition, which is
+--   approximately O(n).
 module Numeric.HHT
 
 -- | A Hilbert-Huang Transform. An <tt><a>HHT</a> v n a</tt> is a
