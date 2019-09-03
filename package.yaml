@@ -1,5 +1,5 @@
 name:                emd
-version:             0.1.5.0
+version:             0.1.5.1
 github:              "mstksg/emd"
 license:             BSD3
 author:              "Justin Le"
@@ -76,6 +76,6 @@ benchmarks:
     - emd
     - ghc-typelits-knownnat
     - mwc-random
-    - pure-fft
     - vector
+    - statistics
     - vector-sized

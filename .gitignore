@@ -2,5 +2,6 @@
 emd.cabal
 *~
 /data
-/test-data
 /reference
+.ghc.environment.*
+/dist-newstyle

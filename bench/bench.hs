@@ -9,14 +9,13 @@ import           Control.Exception
 import           Criterion.Main
 import           Data.Char
 import           Data.Complex
-import           Data.Maybe
 import           GHC.TypeNats
 import           Numeric.EMD
+import           Statistics.Transform
 import           Text.Printf
-import qualified Data.Vector       as UV
-import qualified Data.Vector.Sized as V
-import qualified Numeric.FFT       as FFT
-import qualified System.Random.MWC as MWC
+import qualified Data.Vector          as UV
+import qualified Data.Vector.Sized    as V
+import qualified System.Random.MWC    as MWC
 
 main :: IO ()
 main = do
@@ -63,14 +62,8 @@ generateData g = fmap (fmap realPart . ifftSized) . V.generateM $ \i ->
     let i' = recip . (+ 1) . fromIntegral $ i
     in  (:+) <$> MWC.uniformR (-i', i') g
              <*> MWC.uniformR (-i', i') g
-  where
-
 
 ifftSized
-    :: KnownNat n
-    => V.Vector (2^n) (Complex Double)
+    :: V.Vector (2^n) (Complex Double)
     -> V.Vector (2^n) (Complex Double)
-ifftSized = fromJust
-          . V.fromList
-          . FFT.ifft
-          . V.toList
+ifftSized = V.withVectorUnsafe ifft

@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 0.1.5.1
+---------------
+
+*September 3, 2019*
+
+<https://github.com/mstksg/emd/releases/tag/v0.1.5.1>
+
+*   Remove dependency on *pure-fft*, using *statistics* instead.
+
 Version 0.1.5.0
 ---------------
 
