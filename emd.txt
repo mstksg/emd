@@ -7,7 +7,7 @@
 --   Please see the README on GitHub at
 --   <a>https://github.com/mstksg/emd#readme</a>
 @package emd
-@version 0.1.5.0
+@version 0.1.5.1
 
 
 -- | Internal splining functionality exported for testing purposes only.
