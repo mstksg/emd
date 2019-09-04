@@ -4,8 +4,8 @@
 
 -- | Empirical Mode Decomposition and Hilbert-Huang Transform
 --   
---   Please see the README on GitHub at
---   <a>https://github.com/mstksg/emd#readme</a>
+--   Empirical Mode decomposition and Hilbert-Huang Transform in pure
+--   Haskell.
 @package emd
 @version 0.1.5.1
 
