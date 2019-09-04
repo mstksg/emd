@@ -15,10 +15,10 @@ extra-source-files:
 synopsis:            Empirical Mode Decomposition and Hilbert-Huang Transform
 category:            Math
 
-# To avoid duplicated efforts in documentation and dealing with the
-# complications of embedding Haddock markup inside cabal files, it is
-# common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/mstksg/emd#readme>
+description: |
+  Empirical Mode decomposition and Hilbert-Huang Transform in pure
+  Haskell.
+
 tested-with:         GHC >= 8.2
 
 dependencies:
