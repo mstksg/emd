@@ -47,6 +47,7 @@ module Numeric.HHT (
   -- * Hilbert transforms (internal usage)
   , hilbert
   , hilbertIm
+  , hilbertPolar
   , hilbertMagFreq
   ) where
 
@@ -281,10 +282,39 @@ hilbertMagFreq
     -> (SVG.Vector v (n + 1) a, SVG.Vector v n a)
 hilbertMagFreq v = (hilbertMag, hilbertFreq)
   where
-    v' = hilbertIm v
+    v'           = hilbertIm v
     hilbertMag   = SVG.zipWith (\x x' -> magnitude (x :+ x')) v v'
     hilbertPhase = SVG.zipWith (\x x' -> phase (x :+ x')) v v'
     hilbertFreq  = SVG.map ((`mod'` 1) . (/ (2 * pi))) $ SVG.tail hilbertPhase - SVG.init hilbertPhase
+
+-- | The polar form of 'hilbert': returns the magnitude and phase of the
+-- discrete hilbert transform of a series.
+--
+-- The computation of magnitude is unique, but computing phase gives us
+-- some ambiguity.  The interpretation of the hilbert transform for
+-- instantaneous frequency is that the original series "spirals" around the
+-- complex plane as time progresses, like a helix.  So, we impose
+-- a constraint on the phase to uniquely determine it: \(\phi_{t+1}\) is
+-- the /minimal valid phase/ such that \(\phi_{t+1} \geq \phi_{t}\).  This
+-- enforces the phase to be monotonically increasing at the slowest
+-- possible detectable rate.
+--
+-- Note that this function effectively resets the initial phase to be zero,
+-- conceptually rotating 'hilbert' to begin on the real axis.
+--
+-- @since 0.1.6.0
+hilbertPolar
+    :: forall v n a. (VG.Vector v a, KnownNat n, RealFloat a)
+    => SVG.Vector v (n + 1) a
+    -> (SVG.Vector v (n + 1) a, SVG.Vector v (n + 1) a)
+hilbertPolar v = (hilbertMag, hilbertPhase)
+  where
+    hilbertMag :: SVG.Vector v (n + 1) a
+    hilbertFreq :: SVG.Vector v n a
+    (hilbertMag, hilbertFreq) = hilbertMagFreq v
+    hilbertPhase :: SVG.Vector v (n + 1) a
+    hilbertPhase = SVG.scanl' (+) 0 hilbertFreq
+
 
 -- | Real part is original series and imaginary part is hilbert transformed
 -- series.  Creates a "helical" form of the original series that rotates

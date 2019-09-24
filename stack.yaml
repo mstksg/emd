@@ -40,10 +40,8 @@ packages:
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
 extra-deps:
-- vector-sized-1.2.0.1
-- finite-typelits-0.1.4.2
+- vector-sized-1.4.0.0
 - indexed-list-literals-0.2.1.2
-- pure-fft-0.2.0
 
 build:
   haddock-arguments:

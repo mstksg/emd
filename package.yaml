@@ -1,5 +1,5 @@
 name:                emd
-version:             0.1.5.1
+version:             0.1.6.0
 github:              "mstksg/emd"
 license:             BSD3
 author:              "Justin Le"
@@ -46,7 +46,7 @@ library:
   - transformers
   - typelits-witnesses
   - vector
-  - vector-sized
+  - vector-sized >= 1.4
 
 tests:
   emd-test:
@@ -78,4 +78,4 @@ benchmarks:
     - mwc-random
     - vector
     - statistics
-    - vector-sized
+    - vector-sized >= 1.4

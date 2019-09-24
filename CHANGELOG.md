@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 0.1.6.0
+---------------
+
+*September 24, 2019*
+
+<https://github.com/mstksg/emd/releases/tag/v0.1.6.0>
+
+*   Add `hilbertPhase` to *Numeric.HHT*.
+
 Version 0.1.5.1
 ---------------
 

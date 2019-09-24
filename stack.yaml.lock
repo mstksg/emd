@@ -5,33 +5,19 @@
 
 packages:
 - completed:
-    hackage: vector-sized-1.2.0.1@sha256:569160e163b6d85cd80ed3ae2f20a541ced210a721d12cb7eedcad395aefbb92,1670
+    hackage: vector-sized-1.4.0.0@sha256:8c2df1e748bfbab86e177934519995f5c5da66ea0df481104e1dcdc2f7c1a831,1681
     pantry-tree:
-      size: 1138
-      sha256: dab631ff9542ee31cfe77434e2bb4808238e554438706264063d4b7a558943fa
+      size: 1139
+      sha256: 21759821984ff50c2a5f2f2843bd7f3b46e8bbfcfe25c13ca4d290ad4f2027ee
   original:
-    hackage: vector-sized-1.2.0.1
+    hackage: vector-sized-1.4.0.0
 - completed:
-    hackage: finite-typelits-0.1.4.2@sha256:d243523297c0526d32e9b7de98e04b79a4227577ddb25d3fecd7981439de243c,720
-    pantry-tree:
-      size: 285
-      sha256: a893d5f2acc17ea0b1f51dbad3eb1d206bed9d041b66284551b3ee3166595a4f
-  original:
-    hackage: finite-typelits-0.1.4.2
-- completed:
-    hackage: indexed-list-literals-0.2.1.2@sha256:0760e2a86605b5557af7180d4d50e317d75a5a92ca12aaabb6948ce97b7a94ac,2373
+    hackage: indexed-list-literals-0.2.1.2@sha256:8cca1b63332948ced0cd48d776b103add06de0180d153d60dd69945105af10a5,2464
     pantry-tree:
       size: 341
-      sha256: 4e54f8d033a1f46333274ea3d1b9785c9e4fd225dcddc988c7a41353d9959cd5
+      sha256: d1890c0ebaaacacd9ec849ed16bc29182314159745658c8c719b6ed684617c68
   original:
     hackage: indexed-list-literals-0.2.1.2
-- completed:
-    hackage: pure-fft-0.2.0@sha256:1af30d9f06e42e1a8c1930faf0eac467fe91787556c99f8a8c920e1950c24c29,659
-    pantry-tree:
-      size: 211
-      sha256: 461363d5c37839fc03ac7a8130dae096869aba4582ab6757c2f50ddfb0094235
-  original:
-    hackage: pure-fft-0.2.0
 snapshots:
 - completed:
     size: 513872
