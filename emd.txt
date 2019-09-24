@@ -7,7 +7,7 @@
 --   Empirical Mode decomposition and Hilbert-Huang Transform in pure
 --   Haskell.
 @package emd
-@version 0.1.5.1
+@version 0.1.6.0
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -399,6 +399,9 @@ hilbertIm :: forall v n a. (Vector v a, KnownNat n, Floating a) => Vector v n a 
 --   <i>minimal valid phase</i> such that &lt;math&gt;. This enforces the
 --   phase to be monotonically increasing at the slowest possible
 --   detectable rate.
+--   
+--   Note that this function effectively resets the initial phase to be
+--   zero, conceptually rotating <a>hilbert</a> to begin on the real axis.
 hilbertPolar :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => Vector v (n + 1) a -> (Vector v (n + 1) a, Vector v (n + 1) a)
 
 -- | Given a time series, return a time series of the <i>magnitude</i> of
