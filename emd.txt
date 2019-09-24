@@ -388,6 +388,19 @@ hilbert :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, Floating
 --   vector, instead of the periodic assumption taken by matlab's version.
 hilbertIm :: forall v n a. (Vector v a, KnownNat n, Floating a) => Vector v n a -> Vector v n a
 
+-- | The polar form of <a>hilbert</a>: returns the magnitude and phase of
+--   the discrete hilbert transform of a series.
+--   
+--   The computation of magnitude is unique, but computing phase gives us
+--   some ambiguity. The interpretation of the hilbert transform for
+--   instantaneous frequency is that the original series "spirals" around
+--   the complex plane as time progresses, like a helix. So, we impose a
+--   constraint on the phase to uniquely determine it: &lt;math&gt; is the
+--   <i>minimal valid phase</i> such that &lt;math&gt;. This enforces the
+--   phase to be monotonically increasing at the slowest possible
+--   detectable rate.
+hilbertPolar :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => Vector v (n + 1) a -> (Vector v (n + 1) a, Vector v (n + 1) a)
+
 -- | Given a time series, return a time series of the <i>magnitude</i> of
 --   the hilbert transform and the <i>frequency</i> of the hilbert
 --   transform, in units of revolutions per tick. Is only expected to taken
