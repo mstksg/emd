@@ -124,6 +124,23 @@ hhtEmd EMD{..} = HHT $ map go emdIMFs
       where
         (m, f) = hilbertMagFreq i
 
+-- | Fold and collapse a Hilbert-Huang transform along the frequency axis
+-- at each step in time.
+foldFreq
+    :: forall v u n a b. (VG.Vector v a, VG.Vector u b, KnownNat n)
+    => (a -> a -> b)  -- ^ Combining function
+    -> (b -> b -> b)  -- ^ Associative folding function
+    -> b              -- ^ Initial accumulator
+    -> HHT v n a
+    -> SVG.Vector u n b
+foldFreq f g x = foldl' (SVG.zipWith g) (SVG.replicate x)
+               . map split
+               . hhtLines
+  where
+    split :: HHTLine v n a -> SVG.Vector u n b
+    split HHTLine{..} = SVG.generate $ \i ->
+      f (hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
+
 -- | Compute the full Hilbert-Huang Transform spectrum.  At each timestep
 -- is a sparse map of frequency components and their respective magnitudes.
 -- Frequencies not in the map are considered to be zero.
@@ -138,11 +155,7 @@ hhtSpectrum
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
     -> HHT v n a
     -> SV.Vector n (M.Map k a)
-hhtSpectrum f = foldl' ((SV.zipWith . M.unionWith) (+)) (pure mempty) . map go . hhtLines
-  where
-    go :: HHTLine v n a -> SV.Vector n (M.Map k a)
-    go HHTLine{..} = SV.generate $ \i ->
-      M.singleton (f $ hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
+hhtSpectrum f = foldFreq (M.singleton . f) (M.unionWith (+)) M.empty
 
 -- | A sparser vesion of 'hhtSpectrum'.  Compute the full Hilbert-Huang
 -- Transform spectrum.  Returns a /sparse/ matrix representing the power at
@@ -205,21 +218,12 @@ marginal f = M.unionsWith (+) . concatMap go . hhtLines
 --
 -- @since 0.1.4.0
 expectedFreq
-    :: forall v n a. (VG.Vector v a, KnownNat n, Fractional a)
+    :: forall v n a. (VG.Vector v a, VG.Vector v (a, a), KnownNat n, Fractional a)
     => HHT v n a
     -> SVG.Vector v n a
-expectedFreq HHT{..} = SVG.generate $ \i -> weightedAverage . map (go i) $ hhtLines
+expectedFreq = SVG.map (uncurry (/)) . foldFreq (,) g (0,0)
   where
-    go :: Finite n -> HHTLine v n a -> (a, a)
-    go i HHTLine{..} = (hlFreqs `SVG.index` i, hlMags `SVG.index` i)
-
-weightedAverage
-    :: (Foldable t, Fractional a)
-    => t (a, a)
-    -> a
-weightedAverage = uncurry (/) . foldl' go (0, 0)
-  where
-    go (!sx, !sw) (!x, !w) = (sx + x, sw + w)
+    g (!sx, !sw) (!x, !w) = (sx + x, sw + w)
 
 -- | Returns the dominant frequency (frequency with largest magnitude
 -- contribution) at each time step.
