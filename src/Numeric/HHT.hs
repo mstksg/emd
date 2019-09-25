@@ -39,6 +39,7 @@ module Numeric.HHT (
   -- ** Properties of spectrum
   , marginal, instantaneousEnergy, degreeOfStationarity
   , expectedFreq, dominantFreq
+  , foldFreq
   -- ** Options
   , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
   -- * Hilbert transforms (internal usage)
@@ -53,7 +54,6 @@ import           Data.Complex
 import           Data.Finite
 import           Data.Fixed
 import           Data.Foldable
-import           Data.Maybe
 import           Data.Proxy
 import           Data.Semigroup
 import           GHC.Generics              (Generic)
@@ -61,7 +61,6 @@ import           GHC.TypeNats
 import           Numeric.EMD
 import           Numeric.HHT.Internal.FFT
 import qualified Data.Binary               as Bi
-import qualified Data.List.NonEmpty        as NE
 import qualified Data.Map                  as M
 import qualified Data.Vector.Generic       as VG
 import qualified Data.Vector.Generic.Sized as SVG
@@ -125,21 +124,34 @@ hhtEmd EMD{..} = HHT $ map go emdIMFs
         (m, f) = hilbertMagFreq i
 
 -- | Fold and collapse a Hilbert-Huang transform along the frequency axis
--- at each step in time.
+-- at each step in time along some monoid.
+--
+-- @since 0.1.8.0
 foldFreq
-    :: forall v u n a b. (VG.Vector v a, VG.Vector u b, KnownNat n)
-    => (a -> a -> b)  -- ^ Combining function
-    -> (b -> b -> b)  -- ^ Associative folding function
-    -> b              -- ^ Initial accumulator
+    :: forall v u n a b c. (VG.Vector v a, VG.Vector u c, KnownNat n, Monoid b)
+    => (a -> a -> b)  -- ^ Combining function, taking frequency, then magnitude
+    -> (b -> c)       -- ^ Projecting function
     -> HHT v n a
-    -> SVG.Vector u n b
-foldFreq f g x = foldl' (SVG.zipWith g) (SVG.replicate x)
-               . map split
-               . hhtLines
+    -> SVG.Vector u n c
+foldFreq f g = SVG.convert
+             . fmap g
+             . foldl' (SV.zipWith (<>)) (SV.replicate mempty)
+             . map split
+             . hhtLines
   where
-    split :: HHTLine v n a -> SVG.Vector u n b
+    split :: HHTLine v n a -> SV.Vector n b
     split HHTLine{..} = SVG.generate $ \i ->
       f (hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
+    {-# INLINE split #-}
+{-# INLINE foldFreq #-}
+
+newtype SumMap k a = SumMap { getSumMap :: M.Map k a }
+
+instance (Ord k, Num a) => Semigroup (SumMap k a) where
+    SumMap x <> SumMap y = SumMap $ M.unionWith (+) x y
+
+instance (Ord k, Num a) => Monoid (SumMap k a) where
+    mempty = SumMap M.empty
 
 -- | Compute the full Hilbert-Huang Transform spectrum.  At each timestep
 -- is a sparse map of frequency components and their respective magnitudes.
@@ -155,7 +167,7 @@ hhtSpectrum
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
     -> HHT v n a
     -> SV.Vector n (M.Map k a)
-hhtSpectrum f = foldFreq (M.singleton . f) (M.unionWith (+)) M.empty
+hhtSpectrum f = foldFreq (\k -> SumMap . M.singleton (f k)) getSumMap
 
 -- | A sparser vesion of 'hhtSpectrum'.  Compute the full Hilbert-Huang
 -- Transform spectrum.  Returns a /sparse/ matrix representing the power at
@@ -218,12 +230,10 @@ marginal f = M.unionsWith (+) . concatMap go . hhtLines
 --
 -- @since 0.1.4.0
 expectedFreq
-    :: forall v n a. (VG.Vector v a, VG.Vector v (a, a), KnownNat n, Fractional a)
+    :: forall v n a. (VG.Vector v a, KnownNat n, Fractional a)
     => HHT v n a
     -> SVG.Vector v n a
-expectedFreq = SVG.map (uncurry (/)) . foldFreq (,) g (0,0)
-  where
-    g (!sx, !sw) (!x, !w) = (sx + x, sw + w)
+expectedFreq = foldFreq (\x y -> (Sum (x * y), Sum y)) (\(Sum x, Sum y) -> x / y)
 
 -- | Returns the dominant frequency (frequency with largest magnitude
 -- contribution) at each time step.
@@ -233,17 +243,14 @@ dominantFreq
     :: forall v n a. (VG.Vector v a, KnownNat n, Ord a)
     => HHT v n a
     -> SVG.Vector v n a
-dominantFreq HHT{..} = SVG.generate $ \i -> (\(Max (Arg _ x)) -> x)
-                                          . sconcat
-                                          . fromMaybe err
-                                          . NE.nonEmpty
-                                          . map (go i)
-                                          $ hhtLines
+dominantFreq = foldFreq comb proj
   where
-    go :: Finite n -> HHTLine v n a -> ArgMax a a
-    go i HHTLine{..} = Max $ Arg (hlMags  `SVG.index` i)
-                                 (hlFreqs `SVG.index` i)
-    err = errorWithoutStackTrace "Numeric.HHT.dominantFreq: HHT was formed with no Intrinsic Mode Functions"
+    comb :: a -> a -> Maybe (Max (Arg a a))
+    comb x y = Just $ Max $ Arg y x
+    proj :: Maybe (Max (Arg a a)) -> a
+    proj Nothing = errorWithoutStackTrace
+      "Numeric.HHT.dominantFreq: HHT was formed with no Intrinsic Mode Functions"
+    proj (Just (Max (Arg _ x))) = x
 
 -- | Compute the instantaneous energy of the time series at every step via
 -- the Hilbert-Huang Transform.
@@ -251,7 +258,7 @@ instantaneousEnergy
     :: forall v n a. (VG.Vector v a, KnownNat n, Num a)
     => HHT v n a
     -> SVG.Vector v n a
-instantaneousEnergy = sum . map (SVG.map (^ (2 :: Int)) . hlMags) . hhtLines
+instantaneousEnergy = foldFreq (\_ x -> Sum (x * x)) getSum
 
 -- | Degree of stationarity, as a function of frequency.
 degreeOfStationarity
