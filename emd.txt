@@ -299,6 +299,10 @@ expectedFreq :: forall v n a. (Vector v a, KnownNat n, Fractional a) => HHT v n 
 --   contribution) at each time step.
 dominantFreq :: forall v n a. (Vector v a, KnownNat n, Ord a) => HHT v n a -> Vector v n a
 
+-- | Fold and collapse a Hilbert-Huang transform along the frequency axis
+--   at each step in time along some monoid.
+foldFreq :: forall v u n a b c. (Vector v a, Vector u c, KnownNat n, Monoid b) => (a -> a -> b) -> (b -> c) -> HHT v n a -> Vector u n c
+
 -- | Options for EMD composition.
 data EMDOpts a
 EO :: SiftCondition a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts a
@@ -417,6 +421,8 @@ instance GHC.Generics.Generic (Numeric.HHT.HHTLine v n a)
 instance GHC.Classes.Ord (v a) => GHC.Classes.Ord (Numeric.HHT.HHTLine v n a)
 instance GHC.Classes.Eq (v a) => GHC.Classes.Eq (Numeric.HHT.HHTLine v n a)
 instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.HHT.HHTLine v n a)
+instance (GHC.Classes.Ord k, GHC.Num.Num a) => GHC.Base.Semigroup (Numeric.HHT.SumMap k a)
+instance (GHC.Classes.Ord k, GHC.Num.Num a) => GHC.Base.Monoid (Numeric.HHT.SumMap k a)
 instance (Data.Vector.Generic.Base.Vector v a, GHC.TypeNats.KnownNat n, Data.Binary.Class.Binary (v a)) => Data.Binary.Class.Binary (Numeric.HHT.HHT v n a)
 instance Control.DeepSeq.NFData (v a) => Control.DeepSeq.NFData (Numeric.HHT.HHT v n a)
 instance (Data.Vector.Generic.Base.Vector v a, GHC.TypeNats.KnownNat n, Data.Binary.Class.Binary (v a)) => Data.Binary.Class.Binary (Numeric.HHT.HHTLine v n a)
