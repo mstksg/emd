@@ -35,11 +35,15 @@ library:
   other-modules:
   - Numeric.EMD.Internal.Tridiagonal
   - Numeric.EMD.Internal.Extrema
+  - Numeric.HHT.Internal.FFT
   dependencies:
+  - array
   - binary
+  - carray
   - containers
   - data-default-class
   - deepseq
+  - fft
   - finite-typelits
   - ghc-typelits-knownnat
   - ghc-typelits-natnormalise
