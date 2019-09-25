@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.1.7.0
+---------------
+
+*September 24, 2019*
+
+<https://github.com/mstksg/emd/releases/tag/v0.1.7.0>
+
+*   Rewrite `hilbert` using the *fft* library, matching the matlab
+    implementation.  This means that the library now depends on *fftw*.
+
 Version 0.1.6.0
 ---------------
 

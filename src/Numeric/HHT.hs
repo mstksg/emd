@@ -27,12 +27,6 @@
 -- 'hhtEmd'.  See "Numeric.EMD" for information on why this module uses
 -- "sized vectors", and how to convert unsized vectors to sized vectors.
 --
--- Note that the Hilbert Transform implementation in this module is
--- slightly naive and is essentially O(n^2) on the length of the vector.
--- However, computation time for the full Hilbert-Huang Transform is
--- typically dominated by Empirical Mode Docomposition, which is
--- approximately O(n).
---
 -- @since 0.1.2.0
 
 module Numeric.HHT (
@@ -49,6 +43,7 @@ module Numeric.HHT (
   , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
   -- * Hilbert transforms (internal usage)
   , hilbert
+  , hilbertIm
   , hilbertPolar
   , hilbertMagFreq
   ) where
@@ -324,8 +319,8 @@ hilbertPolar v = (hilbertMag, hilbertPhase)
 -- series.  Creates a "helical" form of the original series that rotates
 -- along the complex plane.
 --
--- This uses the same algorithm as the matlab implementation
--- <https://www.mathworks.com/help/signal/ref/hilbert.html>
+-- Note that since /0.1.7.0/, this uses the same algorithm as the matlab
+-- implementation <https://www.mathworks.com/help/signal/ref/hilbert.html>
 hilbert
     :: forall v n a.
       ( VG.Vector v a
@@ -344,4 +339,21 @@ hilbert v = ifft u'
          | i < (n `div` 2)            -> 2 * x
          | otherwise                  -> 0
     n  = natVal (Proxy @n)
+
+-- | Hilbert transformed series.  Essentially the same series, but
+-- phase-shifted 90 degrees.  Is so-named because it is the "imaginary
+-- part" of the proper hilbert transform, 'hilbert'.
+--
+-- Note that since /0.1.7.0/, this uses the same algorithm as the matlab
+-- implementation <https://www.mathworks.com/help/signal/ref/hilbert.html>
+hilbertIm
+    :: forall v n a.
+      ( VG.Vector v a
+      , VG.Vector v (Complex a)
+      , KnownNat n
+      , FFT.FFTWReal a
+      )
+    => SVG.Vector v n a
+    -> SVG.Vector v n a
+hilbertIm = SVG.map imagPart . hilbert
 

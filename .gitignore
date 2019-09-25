@@ -5,3 +5,4 @@ emd.cabal
 /reference
 .ghc.environment.*
 /dist-newstyle
+*.dump-hi
