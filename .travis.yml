@@ -43,6 +43,7 @@ matrix:
         - ghc-8.2.2
         - happy-1.19.5
         - alex-3.1.7
+        - libfftw3-dev
     compiler: ': #GHC 8.2.2'
   - env: BUILD=cabal GHCVER=8.4.4 CABALVER=2.2 HAPPYVER=1.19.5 ALEXVER=3.1.7
     addons:
@@ -54,6 +55,7 @@ matrix:
         - ghc-8.4.4
         - happy-1.19.5
         - alex-3.1.7
+        - libfftw3-dev
     compiler: ': #GHC 8.4.4'
   - env: BUILD=cabal GHCVER=8.6.5 CABALVER=2.4 HAPPYVER=1.19.5 ALEXVER=3.1.7
     addons:
@@ -65,6 +67,7 @@ matrix:
         - ghc-8.6.5
         - happy-1.19.5
         - alex-3.1.7
+        - libfftw3-dev
     compiler: ': #GHC 8.6.5'
   - env: BUILD=cabal GHCVER=head  CABALVER=head HAPPYVER=1.19.5 ALEXVER=3.1.7
     addons:
@@ -76,36 +79,42 @@ matrix:
         - ghc-head
         - happy-1.19.5
         - alex-3.1.7
+        - libfftw3-dev
     compiler: ': #GHC HEAD'
   - env: BUILD=stack ARGS=""
     addons:
       apt:
         packages:
         - libgmp-dev
+        - libfftw3-dev
     compiler: ': #stack default'
   - env: BUILD=stack ARGS="--resolver lts-11"
     addons:
       apt:
         packages:
         - libgmp-dev
+        - libfftw3-dev
     compiler: ': #stack 8.2.2'
   - env: BUILD=stack ARGS="--resolver lts-12"
     addons:
       apt:
         packages:
         - libgmp-dev
+        - libfftw3-dev
     compiler: ': #stack 8.4.4'
   - env: BUILD=stack ARGS="--resolver lts-13"
     addons:
       apt:
         packages:
         - libgmp-dev
+        - libfftw3-dev
     compiler: ': #stack 8.6.5'
   - env: BUILD=stack ARGS="--resolver nightly"
     addons:
       apt:
         packages:
         - libgmp-dev
+        - libfftw3-dev
     compiler: ': #stack nightly'
   - env: BUILD=stack ARGS=""
     os: osx
@@ -183,6 +192,12 @@ before_install:
   mkdir -p $HOME/.cabal
   echo 'remote-repo: hackage.haskell.org:http://hackage.fpcomplete.com/' > $HOME/.cabal/config
   echo 'remote-repo-cache: $HOME/.cabal/packages' >> $HOME/.cabal/config
+- |
+  if [ `uname` = "Darwin" ]
+  then
+    brew update
+    brew install fftw
+  fi
 language: generic
 sudo: false
 
