@@ -133,8 +133,7 @@ foldFreq
     -> (b -> c)       -- ^ Projecting function
     -> HHT v n a
     -> SVG.Vector u n c
-foldFreq f g = SVG.convert
-             . fmap g
+foldFreq f g = pullBack
              . foldl' (SV.zipWith (<>)) (SV.replicate mempty)
              . map split
              . hhtLines
@@ -143,6 +142,9 @@ foldFreq f g = SVG.convert
     split HHTLine{..} = SVG.generate $ \i ->
       f (hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
     {-# INLINE split #-}
+    pullBack :: SV.Vector n b -> SVG.Vector u n c
+    pullBack v = SVG.generate $ \i -> g (v `SV.index` i)
+    {-# INLINE pullBack #-}
 {-# INLINE foldFreq #-}
 
 newtype SumMap k a = SumMap { getSumMap :: M.Map k a }
