@@ -246,12 +246,12 @@ HHTLine :: !Vector v n a -> !Vector v n a -> HHTLine v n a
 
 -- | Compute the Hilbert-Huang transform from a given Empirical Mode
 --   Decomposition.
-hhtEmd :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMD v (n + 1) a -> HHT v n a
+hhtEmd :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => EMD v (n + 1) a -> HHT v n a
 
 -- | Directly compute the Hilbert-Huang transform of a given time series.
 --   Essentially is a composition of <a>hhtEmd</a> and <a>emd</a>. See
 --   <a>hhtEmd</a> for a more flexible version.
-hht :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => EMDOpts a -> Vector v (n + 1) a -> HHT v n a
+hht :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => EMDOpts a -> Vector v (n + 1) a -> HHT v n a
 
 -- | Compute the full Hilbert-Huang Transform spectrum. At each timestep is
 --   a sparse map of frequency components and their respective magnitudes.
@@ -376,17 +376,9 @@ SEClamped :: a -> a -> SplineEnd a
 --   series. Creates a "helical" form of the original series that rotates
 --   along the complex plane.
 --   
---   Numerically assumes that the signal is zero everywhere outside of the
---   vector, instead of the periodic assumption taken by matlab's version.
-hilbert :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, Floating a) => Vector v n a -> Vector v n (Complex a)
-
--- | Hilbert transformed series. Essentially the same series, but
---   phase-shifted 90 degrees. Is so-named because it is the "imaginary
---   part" of the proper hilbert transform, <a>hilbert</a>.
---   
---   Numerically assumes that the signal is zero everywhere outside of the
---   vector, instead of the periodic assumption taken by matlab's version.
-hilbertIm :: forall v n a. (Vector v a, KnownNat n, Floating a) => Vector v n a -> Vector v n a
+--   This uses the same algorithm as the matlab implementation
+--   <a>https://www.mathworks.com/help/signal/ref/hilbert.html</a>
+hilbert :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => Vector v n a -> Vector v n (Complex a)
 
 -- | The polar form of <a>hilbert</a>: returns the magnitude and phase of
 --   the discrete hilbert transform of a series.
@@ -402,7 +394,7 @@ hilbertIm :: forall v n a. (Vector v a, KnownNat n, Floating a) => Vector v n a 
 --   
 --   Note that this function effectively resets the initial phase to be
 --   zero, conceptually rotating <a>hilbert</a> to begin on the real axis.
-hilbertPolar :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => Vector v (n + 1) a -> (Vector v (n + 1) a, Vector v (n + 1) a)
+hilbertPolar :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => Vector v (n + 1) a -> (Vector v (n + 1) a, Vector v (n + 1) a)
 
 -- | Given a time series, return a time series of the <i>magnitude</i> of
 --   the hilbert transform and the <i>frequency</i> of the hilbert
@@ -412,7 +404,7 @@ hilbertPolar :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => Vector v 
 --   The frequency will always be between 0 and 1, since we can't determine
 --   anything faster given the discretization, and we exclude negative
 --   values as physically unmeaningful for an IMF.
-hilbertMagFreq :: forall v n a. (Vector v a, KnownNat n, RealFloat a) => Vector v (n + 1) a -> (Vector v (n + 1) a, Vector v n a)
+hilbertMagFreq :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => Vector v (n + 1) a -> (Vector v (n + 1) a, Vector v n a)
 instance GHC.Generics.Generic (Numeric.HHT.HHT v n a)
 instance GHC.Classes.Ord (v a) => GHC.Classes.Ord (Numeric.HHT.HHT v n a)
 instance GHC.Classes.Eq (v a) => GHC.Classes.Eq (Numeric.HHT.HHT v n a)
