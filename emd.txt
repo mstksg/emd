@@ -7,7 +7,7 @@
 --   Empirical Mode decomposition and Hilbert-Huang Transform in pure
 --   Haskell.
 @package emd
-@version 0.1.6.0
+@version 0.1.7.0
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -217,12 +217,6 @@ instance Data.Binary.Class.Binary Numeric.EMD.BoundaryHandler
 --   <a>hht</a> or <a>hhtEmd</a>. See <a>Numeric.EMD</a> for information on
 --   why this module uses "sized vectors", and how to convert unsized
 --   vectors to sized vectors.
---   
---   Note that the Hilbert Transform implementation in this module is
---   slightly naive and is essentially O(n^2) on the length of the vector.
---   However, computation time for the full Hilbert-Huang Transform is
---   typically dominated by Empirical Mode Docomposition, which is
---   approximately O(n).
 module Numeric.HHT
 
 -- | A Hilbert-Huang Transform. An <tt><a>HHT</a> v n a</tt> is a
@@ -376,9 +370,19 @@ SEClamped :: a -> a -> SplineEnd a
 --   series. Creates a "helical" form of the original series that rotates
 --   along the complex plane.
 --   
---   This uses the same algorithm as the matlab implementation
+--   Note that since <i>0.1.7.0</i>, this uses the same algorithm as the
+--   matlab implementation
 --   <a>https://www.mathworks.com/help/signal/ref/hilbert.html</a>
 hilbert :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => Vector v n a -> Vector v n (Complex a)
+
+-- | Hilbert transformed series. Essentially the same series, but
+--   phase-shifted 90 degrees. Is so-named because it is the "imaginary
+--   part" of the proper hilbert transform, <a>hilbert</a>.
+--   
+--   Note that since <i>0.1.7.0</i>, this uses the same algorithm as the
+--   matlab implementation
+--   <a>https://www.mathworks.com/help/signal/ref/hilbert.html</a>
+hilbertIm :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => Vector v n a -> Vector v n a
 
 -- | The polar form of <a>hilbert</a>: returns the magnitude and phase of
 --   the discrete hilbert transform of a series.
