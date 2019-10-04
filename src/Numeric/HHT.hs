@@ -273,22 +273,24 @@ instantaneousEnergy = foldFreq (\_ x -> Sum (x * x)) getSum
 
 -- | Degree of stationarity, as a function of frequency.
 degreeOfStationarity
-    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Fractional a, Ord a)
+    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Fractional a, Eq a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
     -> HHT v n a
     -> M.Map k a
-degreeOfStationarity f h = M.unionsWith (+)
+degreeOfStationarity f h = fmap (/ n)
+                         . M.unionsWith (+)
                          . concatMap go
                          . hhtLines
                          $ h
   where
+    n = fromIntegral $ natVal (Proxy @n)
     meanMarg = meanMarginal f h
     go :: HHTLine v n a -> [M.Map k a]
     go HHTLine{..} = flip fmap (finites @n) $ \i ->
         let fr = f $ hlFreqs `SVG.index` i
             mm = meanMarg M.! fr
         in  M.singleton fr $
-              if abs mm < 0.00001
+              if mm == 0
                 then 1
                 else (1 - (hlMags `SVG.index` i / mm)) ^ (2 :: Int)
 
