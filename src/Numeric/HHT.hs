@@ -37,7 +37,7 @@ module Numeric.HHT (
   -- ** Hilbert-Huang Spectrum
   , hhtSpectrum, hhtSparseSpectrum, hhtDenseSpectrum
   -- ** Properties of spectrum
-  , marginal, meanMarginal, instantaneousEnergy, degreeOfStationarity
+  , meanMarginal, meanMarginal, instantaneousEnergy, degreeOfStationarity
   , expectedFreq, dominantFreq
   , foldFreq
   -- ** Options
@@ -209,9 +209,11 @@ hhtDenseSpectrum f h = SV.generate $ \i -> SV.generate $ \j ->
   where
     ss = hhtSparseSpectrum f h
 
--- | Compute the marginal spectrum given a Hilbert-Huang Transform. It is
--- similar to a Fourier Transform; it provides the "total power" over the
--- entire time series for each frequency component.
+-- | Compute the marginal spectrum given a Hilbert-Huang Transform. It
+-- provides the "total power" over the entire time series for each
+-- frequency component.  See 'meanMarginal' for a version that averages
+-- over the length of the time series, making it more close in nature to
+-- the purpose of a Fourier Transform.
 --
 -- A binning function is accepted to allow you to specify how specific you
 -- want your frequencies to be.
@@ -226,6 +228,15 @@ marginal f = M.unionsWith (+) . concatMap go . hhtLines
     go HHTLine{..} = flip fmap (finites @n) $ \i ->
       M.singleton (f $ hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
 
+-- | Compute the mean marginal spectrum given a Hilbert-Huang Transform. It
+-- is similar to a Fourier Transform; it provides the "total power" over
+-- the entire time series for each frequency component, averaged over the
+-- length of the time series.
+--
+-- A binning function is accepted to allow you to specify how specific you
+-- want your frequencies to be.
+--
+-- @since 0.1.8.0
 meanMarginal
     :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Fractional a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.

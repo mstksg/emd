@@ -1,6 +1,19 @@
 Changelog
 =========
 
+Version 0.1.8.0
+---------------
+
+*October 4, 2019*
+
+<https://github.com/mstksg/emd/releases/tag/v0.1.8.0>
+
+*   Add `meanMarginal`
+*   Fix `degreeOfStationarity` for divide-by-zero errors.
+*   Add `foldFreq` for generalized folding on `HHT`, and rewrote other
+    functions in terms of it.
+*   Drop support for GHC 8.2 and lower.
+
 Version 0.1.7.0
 ---------------
 
