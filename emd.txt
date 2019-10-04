@@ -282,13 +282,14 @@ hhtDenseSpectrum :: forall v n m a. (Vector v a, KnownNat n, KnownNat m, Num a) 
 --   A binning function is accepted to allow you to specify how specific
 --   you want your frequencies to be.
 marginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Map k a
+meanMarginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Fractional a) => (a -> k) -> HHT v n a -> Map k a
 
 -- | Compute the instantaneous energy of the time series at every step via
 --   the Hilbert-Huang Transform.
 instantaneousEnergy :: forall v n a. (Vector v a, KnownNat n, Num a) => HHT v n a -> Vector v n a
 
 -- | Degree of stationarity, as a function of frequency.
-degreeOfStationarity :: forall v n a k. (Vector v a, KnownNat n, Ord k, Fractional a) => (a -> k) -> HHT v n a -> Map k a
+degreeOfStationarity :: forall v n a k. (Vector v a, KnownNat n, Ord k, Fractional a, Eq a) => (a -> k) -> HHT v n a -> Map k a
 
 -- | Returns the "expected value" of frequency at each time step,
 --   calculated as a weighted average of all contributions at every

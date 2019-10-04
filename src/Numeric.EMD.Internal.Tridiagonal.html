@@ -1,81 +1,508 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE DataKinds                                #-}</span><span>
-</span><a name="line-2"></a><span class="hs-pragma">{-# LANGUAGE ScopedTypeVariables                      #-}</span><span>
-</span><a name="line-3"></a><span class="hs-pragma">{-# LANGUAGE TypeApplications                         #-}</span><span>
-</span><a name="line-4"></a><span class="hs-pragma">{-# LANGUAGE TypeFamilies                             #-}</span><span>
-</span><a name="line-5"></a><span class="hs-pragma">{-# LANGUAGE TypeOperators                            #-}</span><span>
-</span><a name="line-6"></a><span class="hs-pragma">{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}</span><span>
-</span><a name="line-7"></a><span class="hs-pragma">{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}</span><span>
-</span><a name="line-8"></a><span>
-</span><a name="line-9"></a><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Numeric.EMD.Internal.Tridiagonal</span><span> </span><span class="hs-special">(</span><span>
-</span><a name="line-10"></a><span>    </span><a href="Numeric.EMD.Internal.Tridiagonal.html#solveTridiagonal"><span class="hs-identifier hs-var">solveTridiagonal</span></a><span>
-</span><a name="line-11"></a><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
-</span><a name="line-12"></a><span>
-</span><a name="line-13"></a><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">Control.Applicative.Backwards</span><span>
-</span><a name="line-14"></a><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">Control.Monad</span><span>
-</span><a name="line-15"></a><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">Control.Monad.ST</span><span>
-</span><a name="line-16"></a><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">Control.Monad.Trans.Class</span><span>
-</span><a name="line-17"></a><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">Control.Monad.Trans.Maybe</span><span>
-</span><a name="line-18"></a><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">Data.Finite</span><span>
-</span><a name="line-19"></a><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">Data.Foldable</span><span>
-</span><a name="line-20"></a><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">GHC.TypeNats</span><span>
-</span><a name="line-21"></a><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="hs-identifier">Data.Vector.Generic</span><span>               </span><span class="hs-keyword">as</span><span> </span><span class="hs-identifier">VG</span><span>
-</span><a name="line-22"></a><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="hs-identifier">Data.Vector.Generic.Mutable.Sized</span><span> </span><span class="hs-keyword">as</span><span> </span><span class="hs-identifier">SMVG</span><span>
-</span><a name="line-23"></a><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="hs-identifier">Data.Vector.Generic.Sized</span><span>         </span><span class="hs-keyword">as</span><span> </span><span class="hs-identifier">SVG</span><span>
-</span><a name="line-24"></a><span>
-</span><a name="line-25"></a><span class="hs-comment">-- | &lt;https://en.wikipedia.org/wiki/Tridiagonal_matrix_algorithm&gt;</span><span>
-</span><a name="line-26"></a><span class="hs-comment">--</span><span>
-</span><a name="line-27"></a><span class="hs-comment">-- Will return 'Nothing' if the matrix is not invertible.  This will happen</span><span>
-</span><a name="line-28"></a><span class="hs-comment">-- if:</span><span>
-</span><a name="line-29"></a><span class="hs-comment">--</span><span>
-</span><a name="line-30"></a><span class="hs-comment">-- 1. The first item in the main diagonal is zero</span><span>
-</span><a name="line-31"></a><span class="hs-comment">-- 2. There is any i such that b_{i + 1} = a_i * c_i.  That is, an item in</span><span>
-</span><a name="line-32"></a><span class="hs-comment">-- the main diagonal is equal to the product of the off-diagonal elements</span><span>
-</span><a name="line-33"></a><span class="hs-comment">-- a row above it</span><span>
-</span><a name="line-34"></a><span class="hs-comment">-- 3. Another mystery condition!</span><span>
-</span><a name="line-35"></a><span class="hs-identifier">solveTridiagonal</span><span>
-</span><a name="line-36"></a><span>    </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><a name="local-6989586621679078886"><a href="#local-6989586621679078886"><span class="hs-identifier">v</span></a></a><span> </span><a name="local-6989586621679078887"><a href="#local-6989586621679078887"><span class="hs-identifier">n</span></a></a><span> </span><a name="local-6989586621679078888"><a href="#local-6989586621679078888"><span class="hs-identifier">a</span></a></a><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">VG.Vector</span><span> </span><a href="#local-6989586621679078886"><span class="hs-identifier hs-type">v</span></a><span> </span><a href="#local-6989586621679078888"><span class="hs-identifier hs-type">a</span></a><span class="hs-special">,</span><span> </span><span class="hs-identifier hs-type">KnownNat</span><span> </span><a href="#local-6989586621679078887"><span class="hs-identifier hs-type">n</span></a><span class="hs-special">,</span><span> </span><span class="hs-identifier hs-type">Fractional</span><span> </span><a href="#local-6989586621679078888"><span class="hs-identifier hs-type">a</span></a><span class="hs-special">,</span><span> </span><span class="hs-identifier hs-type">Eq</span><span> </span><a href="#local-6989586621679078888"><span class="hs-identifier hs-type">a</span></a><span class="hs-special">)</span><span>
-</span><a name="line-37"></a><span>    </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-identifier hs-type">SVG.Vector</span><span> </span><a href="#local-6989586621679078886"><span class="hs-identifier hs-type">v</span></a><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">n</span><span> </span><span class="hs-operator hs-type">+</span><span> </span><span class="hs-number">1</span><span class="hs-special">)</span><span> </span><a href="#local-6989586621679078888"><span class="hs-identifier hs-type">a</span></a><span>           </span><span class="hs-comment">-- ^ a: Bottom diagonal of M</span><span>
-</span><a name="line-38"></a><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-identifier hs-type">SVG.Vector</span><span> </span><a href="#local-6989586621679078886"><span class="hs-identifier hs-type">v</span></a><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">n</span><span> </span><span class="hs-operator hs-type">+</span><span> </span><span class="hs-number">2</span><span class="hs-special">)</span><span> </span><a href="#local-6989586621679078888"><span class="hs-identifier hs-type">a</span></a><span>           </span><span class="hs-comment">-- ^ b: Main diagonal of M</span><span>
-</span><a name="line-39"></a><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-identifier hs-type">SVG.Vector</span><span> </span><a href="#local-6989586621679078886"><span class="hs-identifier hs-type">v</span></a><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">n</span><span> </span><span class="hs-operator hs-type">+</span><span> </span><span class="hs-number">1</span><span class="hs-special">)</span><span> </span><a href="#local-6989586621679078888"><span class="hs-identifier hs-type">a</span></a><span>           </span><span class="hs-comment">-- ^ c: Upper diagonal of M</span><span>
-</span><a name="line-40"></a><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-identifier hs-type">SVG.Vector</span><span> </span><a href="#local-6989586621679078886"><span class="hs-identifier hs-type">v</span></a><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">n</span><span> </span><span class="hs-operator hs-type">+</span><span> </span><span class="hs-number">2</span><span class="hs-special">)</span><span> </span><a href="#local-6989586621679078888"><span class="hs-identifier hs-type">a</span></a><span>           </span><span class="hs-comment">-- ^ y</span><span>
-</span><a name="line-41"></a><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-identifier hs-type">Maybe</span><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">SVG.Vector</span><span> </span><a href="#local-6989586621679078886"><span class="hs-identifier hs-type">v</span></a><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">n</span><span> </span><span class="hs-operator hs-type">+</span><span> </span><span class="hs-number">2</span><span class="hs-special">)</span><span> </span><a href="#local-6989586621679078888"><span class="hs-identifier hs-type">a</span></a><span class="hs-special">)</span><span>   </span><span class="hs-comment">-- ^ x such that M x = y</span><span>
-</span><a name="line-42"></a><a name="solveTridiagonal"><a href="Numeric.EMD.Internal.Tridiagonal.html#solveTridiagonal"><span class="hs-identifier">solveTridiagonal</span></a></a><span> </span><span class="hs-keyword">as</span><span> </span><a name="local-6989586621679078890"><a href="#local-6989586621679078890"><span class="hs-identifier">bs</span></a></a><span> </span><a name="local-6989586621679078891"><a href="#local-6989586621679078891"><span class="hs-identifier">cs</span></a></a><span> </span><a name="local-6989586621679078892"><a href="#local-6989586621679078892"><span class="hs-identifier">ds</span></a></a><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-identifier hs-var">runST</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier">runMaybeT</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-keyword">do</span><span>
-</span><a name="line-43"></a><span>    </span><span class="hs-identifier hs-var">guard</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SVG.head</span><span> </span><a href="#local-6989586621679078890"><span class="hs-identifier hs-var">bs</span></a><span> </span><span class="hs-operator hs-var">/=</span><span> </span><span class="hs-number">0</span><span>
-</span><a name="line-44"></a><span>    </span><a name="local-6989586621679079580"><a href="#local-6989586621679079580"><span class="hs-identifier">cs'</span></a></a><span> </span><span class="hs-glyph">&lt;-</span><span> </span><a href="#local-6989586621679078893"><span class="hs-identifier hs-var">makeCs</span></a><span>
-</span><a name="line-45"></a><span>    </span><a name="local-6989586621679079581"><a href="#local-6989586621679079581"><span class="hs-identifier">mxs</span></a></a><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-identifier hs-var">lift</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SVG.thaw</span><span> </span><a href="#local-6989586621679078892"><span class="hs-identifier hs-var">ds</span></a><span>
-</span><a name="line-46"></a><span>    </span><a href="#local-6989586621679078894"><span class="hs-identifier hs-var">makeDs</span></a><span> </span><a href="#local-6989586621679079580"><span class="hs-identifier hs-var">cs'</span></a><span> </span><a href="#local-6989586621679079581"><span class="hs-identifier hs-var">mxs</span></a><span>
-</span><a name="line-47"></a><span>    </span><span class="hs-identifier">forwards</span><span> </span><span class="hs-operator hs-var">.</span><span> </span><span class="hs-identifier hs-var">for_</span><span> </span><span class="hs-special">(</span><a href="Numeric.EMD.Internal.Tridiagonal.html#consecFinites"><span class="hs-identifier hs-var">consecFinites</span></a><span> </span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="hs-identifier hs-type">n</span><span> </span><span class="hs-operator hs-type">+</span><span> </span><span class="hs-number">1</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><a name="local-6989586621679079582"><a href="#local-6989586621679079582"><span class="hs-identifier">i0</span></a></a><span class="hs-special">,</span><span> </span><a name="local-6989586621679079583"><a href="#local-6989586621679079583"><span class="hs-identifier">i1</span></a></a><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-identifier hs-var">Backwards</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-keyword">do</span><span>
-</span><a name="line-48"></a><span>      </span><a name="local-6989586621679079584"><a href="#local-6989586621679079584"><span class="hs-identifier">x1</span></a></a><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-identifier hs-var">lift</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SMVG.read</span><span> </span><a href="#local-6989586621679079581"><span class="hs-identifier hs-var">mxs</span></a><span> </span><a href="#local-6989586621679079583"><span class="hs-identifier hs-var">i1</span></a><span>
-</span><a name="line-49"></a><span>      </span><span class="hs-keyword">let</span><span> </span><a name="local-6989586621679079585"><a href="#local-6989586621679079585"><span class="hs-identifier">sbr</span></a></a><span> </span><span class="hs-glyph">=</span><span> </span><a href="#local-6989586621679079580"><span class="hs-identifier hs-var">cs'</span></a><span> </span><span class="hs-special">`</span><span class="hs-identifier hs-var">SVG.index</span><span class="hs-special">`</span><span> </span><a href="#local-6989586621679079582"><span class="hs-identifier hs-var">i0</span></a><span> </span><span class="hs-operator hs-var">*</span><span> </span><a href="#local-6989586621679079584"><span class="hs-identifier hs-var">x1</span></a><span>
-</span><a name="line-50"></a><span>      </span><span class="hs-identifier hs-var">lift</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SMVG.modify</span><span> </span><a href="#local-6989586621679079581"><span class="hs-identifier hs-var">mxs</span></a><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-var">subtract</span><span> </span><a href="#local-6989586621679079585"><span class="hs-identifier hs-var">sbr</span></a><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-var">weaken</span><span> </span><a href="#local-6989586621679079582"><span class="hs-identifier hs-var">i0</span></a><span class="hs-special">)</span><span>
-</span><a name="line-51"></a><span>    </span><span class="hs-identifier hs-var">lift</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SVG.freeze</span><span> </span><a href="#local-6989586621679079581"><span class="hs-identifier hs-var">mxs</span></a><span>
-</span><a name="line-52"></a><span>  </span><span class="hs-keyword">where</span><span>
-</span><a name="line-53"></a><span>    </span><span class="hs-identifier">makeCs</span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-identifier hs-type">MaybeT</span><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">ST</span><span> </span><a href="#local-6989586621679078895"><span class="hs-identifier hs-type">s</span></a><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">SVG.Vector</span><span> </span><a href="#local-6989586621679078886"><span class="hs-identifier hs-type">v</span></a><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">n</span><span> </span><span class="hs-operator hs-type">+</span><span> </span><span class="hs-number">1</span><span class="hs-special">)</span><span> </span><a href="#local-6989586621679078888"><span class="hs-identifier hs-type">a</span></a><span class="hs-special">)</span><span>
-</span><a name="line-54"></a><span>    </span><a name="local-6989586621679078893"><a href="#local-6989586621679078893"><span class="hs-identifier">makeCs</span></a></a><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
-</span><a name="line-55"></a><span>      </span><a name="local-6989586621679079006"><a href="#local-6989586621679079006"><span class="hs-identifier">mcs</span></a></a><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-identifier hs-var">lift</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SVG.thaw</span><span> </span><a href="#local-6989586621679078891"><span class="hs-identifier hs-var">cs</span></a><span>
-</span><a name="line-56"></a><span>      </span><span class="hs-identifier hs-var">lift</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SMVG.modify</span><span> </span><a href="#local-6989586621679079006"><span class="hs-identifier hs-var">mcs</span></a><span> </span><span class="hs-special">(</span><span class="hs-operator hs-var">/</span><span> </span><span class="hs-identifier hs-var">SVG.head</span><span> </span><a href="#local-6989586621679078890"><span class="hs-identifier hs-var">bs</span></a><span class="hs-special">)</span><span> </span><span class="hs-identifier hs-var">minBound</span><span>
-</span><a name="line-57"></a><span>      </span><span class="hs-identifier hs-var">for_</span><span> </span><span class="hs-special">(</span><a href="Numeric.EMD.Internal.Tridiagonal.html#consecFinites"><span class="hs-identifier hs-var">consecFinites</span></a><span> </span><span class="hs-glyph">@</span><a href="#local-6989586621679078887"><span class="hs-identifier hs-type">n</span></a><span class="hs-special">)</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><a name="local-6989586621679079568"><a href="#local-6989586621679079568"><span class="hs-identifier">i0</span></a></a><span class="hs-special">,</span><span> </span><a name="local-6989586621679079569"><a href="#local-6989586621679079569"><span class="hs-identifier">i1</span></a></a><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
-</span><a name="line-58"></a><span>        </span><a name="local-6989586621679079570"><a href="#local-6989586621679079570"><span class="hs-identifier">c0</span></a></a><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-identifier hs-var">lift</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SMVG.read</span><span> </span><a href="#local-6989586621679079006"><span class="hs-identifier hs-var">mcs</span></a><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-var">weaken</span><span> </span><a href="#local-6989586621679079568"><span class="hs-identifier hs-var">i0</span></a><span class="hs-special">)</span><span>
-</span><a name="line-59"></a><span>        </span><span class="hs-keyword">let</span><span> </span><a name="local-6989586621679079571"><a href="#local-6989586621679079571"><span class="hs-identifier">dvr</span></a></a><span> </span><span class="hs-glyph">=</span><span> </span><a href="#local-6989586621679078890"><span class="hs-identifier hs-var">bs</span></a><span> </span><span class="hs-special">`</span><span class="hs-identifier hs-var">SVG.index</span><span class="hs-special">`</span><span> </span><span class="hs-identifier hs-var">weaken</span><span> </span><a href="#local-6989586621679079569"><span class="hs-identifier hs-var">i1</span></a><span>
-</span><a name="line-60"></a><span>                </span><span class="hs-glyph">-</span><span> </span><span class="hs-keyword">as</span><span> </span><span class="hs-special">`</span><span class="hs-identifier hs-var">SVG.index</span><span class="hs-special">`</span><span> </span><span class="hs-identifier hs-var">weaken</span><span> </span><a href="#local-6989586621679079568"><span class="hs-identifier hs-var">i0</span></a><span> </span><span class="hs-operator hs-var">*</span><span> </span><a href="#local-6989586621679079570"><span class="hs-identifier hs-var">c0</span></a><span>
-</span><a name="line-61"></a><span>        </span><span class="hs-identifier hs-var">guard</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><a href="#local-6989586621679079571"><span class="hs-identifier hs-var">dvr</span></a><span> </span><span class="hs-operator hs-var">/=</span><span> </span><span class="hs-number">0</span><span>
-</span><a name="line-62"></a><span>        </span><span class="hs-identifier hs-var">lift</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SMVG.modify</span><span> </span><a href="#local-6989586621679079006"><span class="hs-identifier hs-var">mcs</span></a><span> </span><span class="hs-special">(</span><span class="hs-operator hs-var">/</span><span> </span><a href="#local-6989586621679079571"><span class="hs-identifier hs-var">dvr</span></a><span class="hs-special">)</span><span> </span><a href="#local-6989586621679079569"><span class="hs-identifier hs-var">i1</span></a><span>
-</span><a name="line-63"></a><span>      </span><span class="hs-identifier hs-var">lift</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SVG.freeze</span><span> </span><a href="#local-6989586621679079006"><span class="hs-identifier hs-var">mcs</span></a><span>
-</span><a name="line-64"></a><span>    </span><span class="hs-identifier">makeDs</span><span>
-</span><a name="line-65"></a><span>        </span><span class="hs-glyph">::</span><span> </span><span class="hs-identifier hs-type">SVG.Vector</span><span> </span><a href="#local-6989586621679078886"><span class="hs-identifier hs-type">v</span></a><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">n</span><span> </span><span class="hs-operator hs-type">+</span><span> </span><span class="hs-number">1</span><span class="hs-special">)</span><span> </span><a href="#local-6989586621679078888"><span class="hs-identifier hs-type">a</span></a><span>
-</span><a name="line-66"></a><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-identifier hs-type">SVG.MVector</span><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">VG.Mutable</span><span> </span><a href="#local-6989586621679078886"><span class="hs-identifier hs-type">v</span></a><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">n</span><span> </span><span class="hs-operator hs-type">+</span><span> </span><span class="hs-number">2</span><span class="hs-special">)</span><span> </span><a href="#local-6989586621679079005"><span class="hs-identifier hs-type">s</span></a><span> </span><a href="#local-6989586621679078888"><span class="hs-identifier hs-type">a</span></a><span>
-</span><a name="line-67"></a><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-identifier hs-type">MaybeT</span><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">ST</span><span> </span><a href="#local-6989586621679079005"><span class="hs-identifier hs-type">s</span></a><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
-</span><a name="line-68"></a><span>    </span><a name="local-6989586621679078894"><a href="#local-6989586621679078894"><span class="hs-identifier">makeDs</span></a></a><span> </span><a name="local-6989586621679079572"><a href="#local-6989586621679079572"><span class="hs-identifier">cs'</span></a></a><span> </span><a name="local-6989586621679079573"><a href="#local-6989586621679079573"><span class="hs-identifier">mds</span></a></a><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
-</span><a name="line-69"></a><span>      </span><span class="hs-identifier hs-var">lift</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SMVG.modify</span><span> </span><a href="#local-6989586621679079573"><span class="hs-identifier hs-var">mds</span></a><span> </span><span class="hs-special">(</span><span class="hs-operator hs-var">/</span><span> </span><span class="hs-identifier hs-var">SVG.head</span><span> </span><a href="#local-6989586621679078890"><span class="hs-identifier hs-var">bs</span></a><span class="hs-special">)</span><span> </span><span class="hs-identifier hs-var">minBound</span><span>
-</span><a name="line-70"></a><span>      </span><span class="hs-identifier hs-var">for_</span><span> </span><span class="hs-special">(</span><a href="Numeric.EMD.Internal.Tridiagonal.html#consecFinites"><span class="hs-identifier hs-var">consecFinites</span></a><span> </span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="hs-identifier hs-type">n</span><span> </span><span class="hs-operator hs-type">+</span><span> </span><span class="hs-number">1</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><a name="local-6989586621679079574"><a href="#local-6989586621679079574"><span class="hs-identifier">i0</span></a></a><span class="hs-special">,</span><span> </span><a name="local-6989586621679079575"><a href="#local-6989586621679079575"><span class="hs-identifier">i1</span></a></a><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
-</span><a name="line-71"></a><span>        </span><span class="hs-keyword">let</span><span> </span><a name="local-6989586621679079576"><a href="#local-6989586621679079576"><span class="hs-identifier">c0</span></a></a><span> </span><span class="hs-glyph">=</span><span> </span><a href="#local-6989586621679079572"><span class="hs-identifier hs-var">cs'</span></a><span> </span><span class="hs-special">`</span><span class="hs-identifier hs-var">SVG.index</span><span class="hs-special">`</span><span> </span><a href="#local-6989586621679079574"><span class="hs-identifier hs-var">i0</span></a><span>
-</span><a name="line-72"></a><span>        </span><a name="local-6989586621679079577"><a href="#local-6989586621679079577"><span class="hs-identifier">d0</span></a></a><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-identifier hs-var">lift</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SMVG.read</span><span> </span><a href="#local-6989586621679079573"><span class="hs-identifier hs-var">mds</span></a><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-var">weaken</span><span> </span><a href="#local-6989586621679079574"><span class="hs-identifier hs-var">i0</span></a><span class="hs-special">)</span><span>
-</span><a name="line-73"></a><span>        </span><span class="hs-keyword">let</span><span> </span><a name="local-6989586621679079578"><a href="#local-6989586621679079578"><span class="hs-identifier">sbr</span></a></a><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">as</span><span> </span><span class="hs-special">`</span><span class="hs-identifier hs-var">SVG.index</span><span class="hs-special">`</span><span> </span><a href="#local-6989586621679079574"><span class="hs-identifier hs-var">i0</span></a><span> </span><span class="hs-operator hs-var">*</span><span> </span><a href="#local-6989586621679079577"><span class="hs-identifier hs-var">d0</span></a><span>
-</span><a name="line-74"></a><span>            </span><a name="local-6989586621679079579"><a href="#local-6989586621679079579"><span class="hs-identifier">dvr</span></a></a><span> </span><span class="hs-glyph">=</span><span> </span><a href="#local-6989586621679078890"><span class="hs-identifier hs-var">bs</span></a><span> </span><span class="hs-special">`</span><span class="hs-identifier hs-var">SVG.index</span><span class="hs-special">`</span><span> </span><a href="#local-6989586621679079575"><span class="hs-identifier hs-var">i1</span></a><span>
-</span><a name="line-75"></a><span>                </span><span class="hs-glyph">-</span><span> </span><span class="hs-keyword">as</span><span> </span><span class="hs-special">`</span><span class="hs-identifier hs-var">SVG.index</span><span class="hs-special">`</span><span> </span><a href="#local-6989586621679079574"><span class="hs-identifier hs-var">i0</span></a><span> </span><span class="hs-operator hs-var">*</span><span> </span><a href="#local-6989586621679079576"><span class="hs-identifier hs-var">c0</span></a><span>
-</span><a name="line-76"></a><span>        </span><span class="hs-identifier hs-var">guard</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><a href="#local-6989586621679079579"><span class="hs-identifier hs-var">dvr</span></a><span> </span><span class="hs-operator hs-var">/=</span><span> </span><span class="hs-number">0</span><span>
-</span><a name="line-77"></a><span>        </span><span class="hs-identifier hs-var">lift</span><span> </span><span class="hs-operator hs-var">$</span><span> </span><span class="hs-identifier hs-var">SMVG.modify</span><span> </span><a href="#local-6989586621679079573"><span class="hs-identifier hs-var">mds</span></a><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="hs-operator hs-var">/</span><span> </span><a href="#local-6989586621679079579"><span class="hs-identifier hs-var">dvr</span></a><span class="hs-special">)</span><span> </span><span class="hs-operator hs-var">.</span><span> </span><span class="hs-identifier hs-var">subtract</span><span> </span><a href="#local-6989586621679079578"><span class="hs-identifier hs-var">sbr</span></a><span class="hs-special">)</span><span> </span><a href="#local-6989586621679079575"><span class="hs-identifier hs-var">i1</span></a><span>
-</span><a name="line-78"></a><span>
-</span><a name="line-79"></a><span class="hs-identifier">consecFinites</span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-identifier hs-type">KnownNat</span><span> </span><a href="#local-6989586621679078885"><span class="hs-identifier hs-type">n</span></a><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="hs-identifier hs-type">Finite</span><span> </span><a href="#local-6989586621679078885"><span class="hs-identifier hs-type">n</span></a><span class="hs-special">,</span><span> </span><span class="hs-identifier hs-type">Finite</span><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-type">n</span><span> </span><span class="hs-operator hs-type">+</span><span> </span><span class="hs-number">1</span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">]</span><span>
-</span><a name="line-80"></a><a name="consecFinites"><a href="Numeric.EMD.Internal.Tridiagonal.html#consecFinites"><span class="hs-identifier">consecFinites</span></a></a><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-identifier hs-var">zip</span><span> </span><span class="hs-identifier hs-var">finites</span><span> </span><span class="hs-special">(</span><span class="hs-identifier hs-var">tail</span><span> </span><span class="hs-identifier hs-var">finites</span><span class="hs-special">)</span><span>
-</span><a name="line-81"></a></pre></body></html>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE ScopedTypeVariables                      #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE TypeApplications                         #-}</span><span>
+</span><span id="line-4"></span><span class="hs-pragma">{-# LANGUAGE TypeFamilies                             #-}</span><span>
+</span><span id="line-5"></span><span class="hs-pragma">{-# LANGUAGE TypeOperators                            #-}</span><span>
+</span><span id="line-6"></span><span class="hs-pragma">{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}</span><span>
+</span><span id="line-7"></span><span class="hs-pragma">{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}</span><span>
+</span><span id="line-8"></span><span>
+</span><span id="line-9"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Numeric.EMD.Internal.Tridiagonal</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-10"></span><span>    </span><span class="annot"><a href="Numeric.EMD.Internal.Tridiagonal.html#solveTridiagonal"><span class="hs-identifier">solveTridiagonal</span></a></span><span>
+</span><span id="line-11"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-12"></span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Applicative.Backwards</span></span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad</span></span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.ST</span></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.Trans.Class</span></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.Trans.Maybe</span></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Finite</span></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Foldable</span></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.TypeNats</span></span><span>
+</span><span id="line-21"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Vector.Generic</span></span><span>               </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">VG</span></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Vector.Generic.Mutable.Sized</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">SMVG</span></span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Vector.Generic.Sized</span></span><span>         </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">SVG</span></span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-comment">-- | &lt;https://en.wikipedia.org/wiki/Tridiagonal_matrix_algorithm&gt;</span><span>
+</span><span id="line-26"></span><span class="hs-comment">--</span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- Will return 'Nothing' if the matrix is not invertible.  This will happen</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- if:</span><span>
+</span><span id="line-29"></span><span class="hs-comment">--</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- 1. The first item in the main diagonal is zero</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- 2. There is any i such that b_{i + 1} = a_i * c_i.  That is, an item in</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- the main diagonal is equal to the product of the off-diagonal elements</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- a row above it</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- 3. Another mystery condition!</span><span>
+</span><span id="line-35"></span><span class="annot"><a href="Numeric.EMD.Internal.Tridiagonal.html#solveTridiagonal"><span class="hs-identifier hs-type">solveTridiagonal</span></a></span><span>
+</span><span id="line-36"></span><span>    </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679165619"><span class="annot"><a href="#local-6989586621679165619"><span class="hs-identifier hs-type">v</span></a></span></span><span> </span><span id="local-6989586621679165618"><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span></span><span> </span><span id="local-6989586621679165617"><span class="annot"><a href="#local-6989586621679165617"><span class="hs-identifier hs-type">a</span></a></span></span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">VG.Vector</span></span><span> </span><span class="annot"><a href="#local-6989586621679165619"><span class="hs-identifier hs-type">v</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679165617"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KnownNat</span></span><span> </span><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Fractional</span></span><span> </span><span class="annot"><a href="#local-6989586621679165617"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679165617"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-37"></span><span>    </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">SVG.Vector</span></span><span> </span><span class="annot"><a href="#local-6989586621679165619"><span class="hs-identifier hs-type">v</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">+</span></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679165617"><span class="hs-identifier hs-type">a</span></a></span><span>           </span><span class="hs-comment">-- ^ a: Bottom diagonal of M</span><span>
+</span><span id="line-38"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">SVG.Vector</span></span><span> </span><span class="annot"><a href="#local-6989586621679165619"><span class="hs-identifier hs-type">v</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">+</span></span><span> </span><span class="annot"><span class="hs-number">2</span></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679165617"><span class="hs-identifier hs-type">a</span></a></span><span>           </span><span class="hs-comment">-- ^ b: Main diagonal of M</span><span>
+</span><span id="line-39"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">SVG.Vector</span></span><span> </span><span class="annot"><a href="#local-6989586621679165619"><span class="hs-identifier hs-type">v</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">+</span></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679165617"><span class="hs-identifier hs-type">a</span></a></span><span>           </span><span class="hs-comment">-- ^ c: Upper diagonal of M</span><span>
+</span><span id="line-40"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">SVG.Vector</span></span><span> </span><span class="annot"><a href="#local-6989586621679165619"><span class="hs-identifier hs-type">v</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">+</span></span><span> </span><span class="annot"><span class="hs-number">2</span></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679165617"><span class="hs-identifier hs-type">a</span></a></span><span>           </span><span class="hs-comment">-- ^ y</span><span>
+</span><span id="line-41"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">SVG.Vector</span></span><span> </span><span class="annot"><a href="#local-6989586621679165619"><span class="hs-identifier hs-type">v</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">+</span></span><span> </span><span class="annot"><span class="hs-number">2</span></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679165617"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>   </span><span class="hs-comment">-- ^ x such that M x = y</span><span>
+</span><span id="line-42"></span><span id="solveTridiagonal"><span class="annot"><span class="annottext">solveTridiagonal :: Vector v (n + 1) a
+-&gt; Vector v (n + 2) a
+-&gt; Vector v (n + 1) a
+-&gt; Vector v (n + 2) a
+-&gt; Maybe (Vector v (n + 2) a)
+</span><a href="Numeric.EMD.Internal.Tridiagonal.html#solveTridiagonal"><span class="hs-identifier hs-var hs-var">solveTridiagonal</span></a></span></span><span> </span><span id="local-6989586621679165616"><span class="annot"><span class="annottext">as :: Vector v (n + 1) a
+</span><a href="#local-6989586621679165616"><span class="hs-keyword hs-var">as</span></a></span></span><span> </span><span id="local-6989586621679165615"><span class="annot"><span class="annottext">bs :: Vector v (n + 2) a
+</span><a href="#local-6989586621679165615"><span class="hs-identifier hs-var">bs</span></a></span></span><span> </span><span id="local-6989586621679165614"><span class="annot"><span class="annottext">cs :: Vector v (n + 1) a
+</span><a href="#local-6989586621679165614"><span class="hs-identifier hs-var">cs</span></a></span></span><span> </span><span id="local-6989586621679165613"><span class="annot"><span class="annottext">ds :: Vector v (n + 2) a
+</span><a href="#local-6989586621679165613"><span class="hs-identifier hs-var">ds</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(forall s. ST s (Maybe (Vector v (n + 2) a)))
+-&gt; Maybe (Vector v (n + 2) a)
+forall a. (forall s. ST s a) -&gt; a
+</span><span class="hs-identifier hs-var">runST</span></span><span> </span><span class="annot"><span class="annottext">((forall s. ST s (Maybe (Vector v (n + 2) a)))
+ -&gt; Maybe (Vector v (n + 2) a))
+-&gt; (forall s. ST s (Maybe (Vector v (n + 2) a)))
+-&gt; Maybe (Vector v (n + 2) a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MaybeT (ST s) (Vector v ((n + 1) + 1) a)
+-&gt; ST s (Maybe (Vector v (n + 2) a))
+forall (m :: * -&gt; *) a. MaybeT m a -&gt; m (Maybe a)
+</span><span class="hs-identifier hs-var hs-var">runMaybeT</span></span><span> </span><span class="annot"><span class="annottext">(MaybeT (ST s) (Vector v ((n + 1) + 1) a)
+ -&gt; ST s (Maybe (Vector v (n + 2) a)))
+-&gt; MaybeT (ST s) (Vector v ((n + 1) + 1) a)
+-&gt; ST s (Maybe (Vector v (n + 2) a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-43"></span><span>    </span><span class="annot"><span class="annottext">Bool -&gt; MaybeT (ST s) ()
+forall (f :: * -&gt; *). Alternative f =&gt; Bool -&gt; f ()
+</span><span class="hs-identifier hs-var">guard</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; MaybeT (ST s) ()) -&gt; Bool -&gt; MaybeT (ST s) ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Vector v (1 + (1 + n)) a -&gt; a
+forall (v :: * -&gt; *) (n :: Nat) a.
+Vector v a =&gt;
+Vector v (1 + n) a -&gt; a
+</span><span class="hs-identifier hs-var">SVG.head</span></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 2) a
+Vector v (1 + (1 + n)) a
+</span><a href="#local-6989586621679165615"><span class="hs-identifier hs-var">bs</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="hs-number">0</span></span><span>
+</span><span id="line-44"></span><span>    </span><span id="local-6989586621679165608"><span class="annot"><span class="annottext">Vector v (n + 1) a
+</span><a href="#local-6989586621679165608"><span class="hs-identifier hs-var">cs'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">MaybeT (ST s) (Vector v (n + 1) a)
+forall s. MaybeT (ST s) (Vector v (n + 1) a)
+</span><a href="#local-6989586621679165607"><span class="hs-identifier hs-var">makeCs</span></a></span><span>
+</span><span id="line-45"></span><span>    </span><span id="local-6989586621679165606"><span class="annot"><span class="annottext">MVector (Mutable v) ((n + 1) + 1) s a
+</span><a href="#local-6989586621679165606"><span class="hs-identifier hs-var">mxs</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ST s (MVector (Mutable v) ((n + 1) + 1) s a)
+-&gt; MaybeT (ST s) (MVector (Mutable v) ((n + 1) + 1) s a)
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(ST s (MVector (Mutable v) ((n + 1) + 1) s a)
+ -&gt; MaybeT (ST s) (MVector (Mutable v) ((n + 1) + 1) s a))
+-&gt; ST s (MVector (Mutable v) ((n + 1) + 1) s a)
+-&gt; MaybeT (ST s) (MVector (Mutable v) ((n + 1) + 1) s a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Vector v ((n + 1) + 1) a
+-&gt; ST s (MVector (Mutable v) ((n + 1) + 1) (PrimState (ST s)) a)
+forall (m :: * -&gt; *) (v :: * -&gt; *) a (n :: Nat).
+(PrimMonad m, Vector v a) =&gt;
+Vector v n a -&gt; m (MVector (Mutable v) n (PrimState m) a)
+</span><span class="hs-identifier hs-var">SVG.thaw</span></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 2) a
+Vector v ((n + 1) + 1) a
+</span><a href="#local-6989586621679165613"><span class="hs-identifier hs-var">ds</span></a></span><span>
+</span><span id="line-46"></span><span>    </span><span class="annot"><span class="annottext">Vector v (n + 1) a
+-&gt; MVector (Mutable v) (n + 2) s a -&gt; MaybeT (ST s) ()
+forall s.
+Vector v (n + 1) a
+-&gt; MVector (Mutable v) (n + 2) s a -&gt; MaybeT (ST s) ()
+</span><a href="#local-6989586621679165603"><span class="hs-identifier hs-var">makeDs</span></a></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a
+</span><a href="#local-6989586621679165608"><span class="hs-identifier hs-var">cs'</span></a></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (n + 2) s a
+MVector (Mutable v) ((n + 1) + 1) s a
+</span><a href="#local-6989586621679165606"><span class="hs-identifier hs-var">mxs</span></a></span><span>
+</span><span id="line-47"></span><span>    </span><span class="annot"><span class="annottext">Backwards (MaybeT (ST s)) () -&gt; MaybeT (ST s) ()
+forall k (f :: k -&gt; *) (a :: k). Backwards f a -&gt; f a
+</span><span class="hs-identifier hs-var hs-var">forwards</span></span><span> </span><span class="annot"><span class="annottext">(Backwards (MaybeT (ST s)) () -&gt; MaybeT (ST s) ())
+-&gt; (((Finite (n + 1), Finite ((n + 1) + 1))
+     -&gt; Backwards (MaybeT (ST s)) ())
+    -&gt; Backwards (MaybeT (ST s)) ())
+-&gt; ((Finite (n + 1), Finite ((n + 1) + 1))
+    -&gt; Backwards (MaybeT (ST s)) ())
+-&gt; MaybeT (ST s) ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[(Finite (n + 1), Finite ((n + 1) + 1))]
+-&gt; ((Finite (n + 1), Finite ((n + 1) + 1))
+    -&gt; Backwards (MaybeT (ST s)) ())
+-&gt; Backwards (MaybeT (ST s)) ()
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+t a -&gt; (a -&gt; f b) -&gt; f ()
+</span><span class="hs-identifier hs-var">for_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KnownNat (n + 1) =&gt; [(Finite (n + 1), Finite ((n + 1) + 1))]
+forall (n :: Nat). KnownNat n =&gt; [(Finite n, Finite (n + 1))]
+</span><a href="Numeric.EMD.Internal.Tridiagonal.html#consecFinites"><span class="hs-identifier hs-var">consecFinites</span></a></span><span> </span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">+</span></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(((Finite (n + 1), Finite ((n + 1) + 1))
+  -&gt; Backwards (MaybeT (ST s)) ())
+ -&gt; MaybeT (ST s) ())
+-&gt; ((Finite (n + 1), Finite ((n + 1) + 1))
+    -&gt; Backwards (MaybeT (ST s)) ())
+-&gt; MaybeT (ST s) ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679165598"><span class="annot"><span class="annottext">i0 :: Finite (n + 1)
+</span><a href="#local-6989586621679165598"><span class="hs-identifier hs-var">i0</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679165597"><span class="annot"><span class="annottext">i1 :: Finite ((n + 1) + 1)
+</span><a href="#local-6989586621679165597"><span class="hs-identifier hs-var">i1</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">MaybeT (ST s) () -&gt; Backwards (MaybeT (ST s)) ()
+forall k (f :: k -&gt; *) (a :: k). f a -&gt; Backwards f a
+</span><span class="hs-identifier hs-var">Backwards</span></span><span> </span><span class="annot"><span class="annottext">(MaybeT (ST s) () -&gt; Backwards (MaybeT (ST s)) ())
+-&gt; MaybeT (ST s) () -&gt; Backwards (MaybeT (ST s)) ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-48"></span><span>      </span><span id="local-6989586621679165595"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165595"><span class="hs-identifier hs-var">x1</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ST s a -&gt; MaybeT (ST s) a
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(ST s a -&gt; MaybeT (ST s) a) -&gt; ST s a -&gt; MaybeT (ST s) a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) ((n + 1) + 1) (PrimState (ST s)) a
+-&gt; Finite ((n + 1) + 1) -&gt; ST s a
+forall (v :: * -&gt; * -&gt; *) (n :: Nat) (m :: * -&gt; *) a.
+(PrimMonad m, MVector v a) =&gt;
+MVector v n (PrimState m) a -&gt; Finite n -&gt; m a
+</span><span class="hs-identifier hs-var">SMVG.read</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) ((n + 1) + 1) s a
+MVector (Mutable v) ((n + 1) + 1) (PrimState (ST s)) a
+</span><a href="#local-6989586621679165606"><span class="hs-identifier hs-var">mxs</span></a></span><span> </span><span class="annot"><span class="annottext">Finite ((n + 1) + 1)
+</span><a href="#local-6989586621679165597"><span class="hs-identifier hs-var">i1</span></a></span><span>
+</span><span id="line-49"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679165593"><span class="annot"><span class="annottext">sbr :: a
+</span><a href="#local-6989586621679165593"><span class="hs-identifier hs-var hs-var">sbr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a
+</span><a href="#local-6989586621679165608"><span class="hs-identifier hs-var">cs'</span></a></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a -&gt; Finite (n + 1) -&gt; a
+forall (v :: * -&gt; *) (n :: Nat) a.
+Vector v a =&gt;
+Vector v n a -&gt; Finite n -&gt; a
+</span><span class="hs-operator hs-var">`SVG.index`</span></span><span> </span><span class="annot"><span class="annottext">Finite (n + 1)
+</span><a href="#local-6989586621679165598"><span class="hs-identifier hs-var">i0</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165595"><span class="hs-identifier hs-var">x1</span></a></span><span>
+</span><span id="line-50"></span><span>      </span><span class="annot"><span class="annottext">ST s () -&gt; MaybeT (ST s) ()
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(ST s () -&gt; MaybeT (ST s) ()) -&gt; ST s () -&gt; MaybeT (ST s) ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) ((n + 1) + 1) (PrimState (ST s)) a
+-&gt; (a -&gt; a) -&gt; Finite ((n + 1) + 1) -&gt; ST s ()
+forall (v :: * -&gt; * -&gt; *) (n :: Nat) (m :: * -&gt; *) a.
+(PrimMonad m, MVector v a) =&gt;
+MVector v n (PrimState m) a -&gt; (a -&gt; a) -&gt; Finite n -&gt; m ()
+</span><span class="hs-identifier hs-var">SMVG.modify</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) ((n + 1) + 1) s a
+MVector (Mutable v) ((n + 1) + 1) (PrimState (ST s)) a
+</span><a href="#local-6989586621679165606"><span class="hs-identifier hs-var">mxs</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">subtract</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165593"><span class="hs-identifier hs-var">sbr</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Finite (n + 1) -&gt; Finite ((n + 1) + 1)
+forall (n :: Nat). Finite n -&gt; Finite (n + 1)
+</span><span class="hs-identifier hs-var">weaken</span></span><span> </span><span class="annot"><span class="annottext">Finite (n + 1)
+</span><a href="#local-6989586621679165598"><span class="hs-identifier hs-var">i0</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-51"></span><span>    </span><span class="annot"><span class="annottext">ST s (Vector v ((n + 1) + 1) a)
+-&gt; MaybeT (ST s) (Vector v ((n + 1) + 1) a)
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(ST s (Vector v ((n + 1) + 1) a)
+ -&gt; MaybeT (ST s) (Vector v ((n + 1) + 1) a))
+-&gt; ST s (Vector v ((n + 1) + 1) a)
+-&gt; MaybeT (ST s) (Vector v ((n + 1) + 1) a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) ((n + 1) + 1) (PrimState (ST s)) a
+-&gt; ST s (Vector v ((n + 1) + 1) a)
+forall (m :: * -&gt; *) (v :: * -&gt; *) a (n :: Nat).
+(PrimMonad m, Vector v a) =&gt;
+MVector (Mutable v) n (PrimState m) a -&gt; m (Vector v n a)
+</span><span class="hs-identifier hs-var">SVG.freeze</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) ((n + 1) + 1) s a
+MVector (Mutable v) ((n + 1) + 1) (PrimState (ST s)) a
+</span><a href="#local-6989586621679165606"><span class="hs-identifier hs-var">mxs</span></a></span><span>
+</span><span id="line-52"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-53"></span><span>    </span><span id="local-6989586621679165677"><span class="annot"><a href="#local-6989586621679165607"><span class="hs-identifier hs-type">makeCs</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">MaybeT</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ST</span></span><span> </span><span class="annot"><a href="#local-6989586621679165677"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">SVG.Vector</span></span><span> </span><span class="annot"><a href="#local-6989586621679165619"><span class="hs-identifier hs-type">v</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">+</span></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679165617"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-54"></span><span>    </span><span id="local-6989586621679165607"><span class="annot"><span class="annottext">makeCs :: MaybeT (ST s) (Vector v (n + 1) a)
+</span><a href="#local-6989586621679165607"><span class="hs-identifier hs-var hs-var">makeCs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-55"></span><span>      </span><span id="local-6989586621679165586"><span class="annot"><span class="annottext">MVector (Mutable v) (n + 1) s a
+</span><a href="#local-6989586621679165586"><span class="hs-identifier hs-var">mcs</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ST s (MVector (Mutable v) (n + 1) s a)
+-&gt; MaybeT (ST s) (MVector (Mutable v) (n + 1) s a)
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(ST s (MVector (Mutable v) (n + 1) s a)
+ -&gt; MaybeT (ST s) (MVector (Mutable v) (n + 1) s a))
+-&gt; ST s (MVector (Mutable v) (n + 1) s a)
+-&gt; MaybeT (ST s) (MVector (Mutable v) (n + 1) s a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a
+-&gt; ST s (MVector (Mutable v) (n + 1) (PrimState (ST s)) a)
+forall (m :: * -&gt; *) (v :: * -&gt; *) a (n :: Nat).
+(PrimMonad m, Vector v a) =&gt;
+Vector v n a -&gt; m (MVector (Mutable v) n (PrimState m) a)
+</span><span class="hs-identifier hs-var">SVG.thaw</span></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a
+</span><a href="#local-6989586621679165614"><span class="hs-identifier hs-var">cs</span></a></span><span>
+</span><span id="line-56"></span><span>      </span><span class="annot"><span class="annottext">ST s () -&gt; MaybeT (ST s) ()
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(ST s () -&gt; MaybeT (ST s) ()) -&gt; ST s () -&gt; MaybeT (ST s) ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (n + 1) (PrimState (ST s)) a
+-&gt; (a -&gt; a) -&gt; Finite (n + 1) -&gt; ST s ()
+forall (v :: * -&gt; * -&gt; *) (n :: Nat) (m :: * -&gt; *) a.
+(PrimMonad m, MVector v a) =&gt;
+MVector v n (PrimState m) a -&gt; (a -&gt; a) -&gt; Finite n -&gt; m ()
+</span><span class="hs-identifier hs-var">SMVG.modify</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (n + 1) s a
+MVector (Mutable v) (n + 1) (PrimState (ST s)) a
+</span><a href="#local-6989586621679165586"><span class="hs-identifier hs-var">mcs</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Vector v (1 + (1 + n)) a -&gt; a
+forall (v :: * -&gt; *) (n :: Nat) a.
+Vector v a =&gt;
+Vector v (1 + n) a -&gt; a
+</span><span class="hs-identifier hs-var">SVG.head</span></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 2) a
+Vector v (1 + (1 + n)) a
+</span><a href="#local-6989586621679165615"><span class="hs-identifier hs-var">bs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Finite (n + 1)
+forall a. Bounded a =&gt; a
+</span><span class="hs-identifier hs-var">minBound</span></span><span>
+</span><span id="line-57"></span><span>      </span><span class="annot"><span class="annottext">[(Finite n, Finite (n + 1))]
+-&gt; ((Finite n, Finite (n + 1)) -&gt; MaybeT (ST s) ())
+-&gt; MaybeT (ST s) ()
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+t a -&gt; (a -&gt; f b) -&gt; f ()
+</span><span class="hs-identifier hs-var">for_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KnownNat n =&gt; [(Finite n, Finite (n + 1))]
+forall (n :: Nat). KnownNat n =&gt; [(Finite n, Finite (n + 1))]
+</span><a href="Numeric.EMD.Internal.Tridiagonal.html#consecFinites"><span class="hs-identifier hs-var">consecFinites</span></a></span><span> </span><span class="hs-glyph">@</span><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(((Finite n, Finite (n + 1)) -&gt; MaybeT (ST s) ())
+ -&gt; MaybeT (ST s) ())
+-&gt; ((Finite n, Finite (n + 1)) -&gt; MaybeT (ST s) ())
+-&gt; MaybeT (ST s) ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679165583"><span class="annot"><span class="annottext">i0 :: Finite n
+</span><a href="#local-6989586621679165583"><span class="hs-identifier hs-var">i0</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679165582"><span class="annot"><span class="annottext">i1 :: Finite (n + 1)
+</span><a href="#local-6989586621679165582"><span class="hs-identifier hs-var">i1</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-58"></span><span>        </span><span id="local-6989586621679165581"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165581"><span class="hs-identifier hs-var">c0</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ST s a -&gt; MaybeT (ST s) a
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(ST s a -&gt; MaybeT (ST s) a) -&gt; ST s a -&gt; MaybeT (ST s) a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (n + 1) (PrimState (ST s)) a
+-&gt; Finite (n + 1) -&gt; ST s a
+forall (v :: * -&gt; * -&gt; *) (n :: Nat) (m :: * -&gt; *) a.
+(PrimMonad m, MVector v a) =&gt;
+MVector v n (PrimState m) a -&gt; Finite n -&gt; m a
+</span><span class="hs-identifier hs-var">SMVG.read</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (n + 1) s a
+MVector (Mutable v) (n + 1) (PrimState (ST s)) a
+</span><a href="#local-6989586621679165586"><span class="hs-identifier hs-var">mcs</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Finite n -&gt; Finite (n + 1)
+forall (n :: Nat). Finite n -&gt; Finite (n + 1)
+</span><span class="hs-identifier hs-var">weaken</span></span><span> </span><span class="annot"><span class="annottext">Finite n
+</span><a href="#local-6989586621679165583"><span class="hs-identifier hs-var">i0</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-59"></span><span>        </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679165580"><span class="annot"><span class="annottext">dvr :: a
+</span><a href="#local-6989586621679165580"><span class="hs-identifier hs-var hs-var">dvr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Vector v (n + 2) a
+Vector v ((n + 1) + 1) a
+</span><a href="#local-6989586621679165615"><span class="hs-identifier hs-var">bs</span></a></span><span> </span><span class="annot"><span class="annottext">Vector v ((n + 1) + 1) a -&gt; Finite ((n + 1) + 1) -&gt; a
+forall (v :: * -&gt; *) (n :: Nat) a.
+Vector v a =&gt;
+Vector v n a -&gt; Finite n -&gt; a
+</span><span class="hs-operator hs-var">`SVG.index`</span></span><span> </span><span class="annot"><span class="annottext">Finite (n + 1) -&gt; Finite ((n + 1) + 1)
+forall (n :: Nat). Finite n -&gt; Finite (n + 1)
+</span><span class="hs-identifier hs-var">weaken</span></span><span> </span><span class="annot"><span class="annottext">Finite (n + 1)
+</span><a href="#local-6989586621679165582"><span class="hs-identifier hs-var">i1</span></a></span><span>
+</span><span id="line-60"></span><span>                </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a
+</span><a href="#local-6989586621679165616"><span class="hs-keyword hs-var">as</span></a></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a -&gt; Finite (n + 1) -&gt; a
+forall (v :: * -&gt; *) (n :: Nat) a.
+Vector v a =&gt;
+Vector v n a -&gt; Finite n -&gt; a
+</span><span class="hs-operator hs-var">`SVG.index`</span></span><span> </span><span class="annot"><span class="annottext">Finite n -&gt; Finite (n + 1)
+forall (n :: Nat). Finite n -&gt; Finite (n + 1)
+</span><span class="hs-identifier hs-var">weaken</span></span><span> </span><span class="annot"><span class="annottext">Finite n
+</span><a href="#local-6989586621679165583"><span class="hs-identifier hs-var">i0</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165581"><span class="hs-identifier hs-var">c0</span></a></span><span>
+</span><span id="line-61"></span><span>        </span><span class="annot"><span class="annottext">Bool -&gt; MaybeT (ST s) ()
+forall (f :: * -&gt; *). Alternative f =&gt; Bool -&gt; f ()
+</span><span class="hs-identifier hs-var">guard</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; MaybeT (ST s) ()) -&gt; Bool -&gt; MaybeT (ST s) ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165580"><span class="hs-identifier hs-var">dvr</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="hs-number">0</span></span><span>
+</span><span id="line-62"></span><span>        </span><span class="annot"><span class="annottext">ST s () -&gt; MaybeT (ST s) ()
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(ST s () -&gt; MaybeT (ST s) ()) -&gt; ST s () -&gt; MaybeT (ST s) ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (n + 1) (PrimState (ST s)) a
+-&gt; (a -&gt; a) -&gt; Finite (n + 1) -&gt; ST s ()
+forall (v :: * -&gt; * -&gt; *) (n :: Nat) (m :: * -&gt; *) a.
+(PrimMonad m, MVector v a) =&gt;
+MVector v n (PrimState m) a -&gt; (a -&gt; a) -&gt; Finite n -&gt; m ()
+</span><span class="hs-identifier hs-var">SMVG.modify</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (n + 1) s a
+MVector (Mutable v) (n + 1) (PrimState (ST s)) a
+</span><a href="#local-6989586621679165586"><span class="hs-identifier hs-var">mcs</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165580"><span class="hs-identifier hs-var">dvr</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Finite (n + 1)
+</span><a href="#local-6989586621679165582"><span class="hs-identifier hs-var">i1</span></a></span><span>
+</span><span id="line-63"></span><span>      </span><span class="annot"><span class="annottext">ST s (Vector v (n + 1) a) -&gt; MaybeT (ST s) (Vector v (n + 1) a)
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(ST s (Vector v (n + 1) a) -&gt; MaybeT (ST s) (Vector v (n + 1) a))
+-&gt; ST s (Vector v (n + 1) a) -&gt; MaybeT (ST s) (Vector v (n + 1) a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (n + 1) (PrimState (ST s)) a
+-&gt; ST s (Vector v (n + 1) a)
+forall (m :: * -&gt; *) (v :: * -&gt; *) a (n :: Nat).
+(PrimMonad m, Vector v a) =&gt;
+MVector (Mutable v) n (PrimState m) a -&gt; m (Vector v n a)
+</span><span class="hs-identifier hs-var">SVG.freeze</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (n + 1) s a
+MVector (Mutable v) (n + 1) (PrimState (ST s)) a
+</span><a href="#local-6989586621679165586"><span class="hs-identifier hs-var">mcs</span></a></span><span>
+</span><span id="line-64"></span><span>    </span><span id="local-6989586621679165664"><span class="annot"><a href="#local-6989586621679165603"><span class="hs-identifier hs-type">makeDs</span></a></span><span>
+</span><span id="line-65"></span><span>        </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">SVG.Vector</span></span><span> </span><span class="annot"><a href="#local-6989586621679165619"><span class="hs-identifier hs-type">v</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">+</span></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679165617"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-66"></span><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">SVG.MVector</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">VG.Mutable</span></span><span> </span><span class="annot"><a href="#local-6989586621679165619"><span class="hs-identifier hs-type">v</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">+</span></span><span> </span><span class="annot"><span class="hs-number">2</span></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679165664"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679165617"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-67"></span><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">MaybeT</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ST</span></span><span> </span><span class="annot"><a href="#local-6989586621679165664"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span></span><span>
+</span><span id="line-68"></span><span>    </span><span id="local-6989586621679165603"><span class="annot"><span class="annottext">makeDs :: Vector v (n + 1) a
+-&gt; MVector (Mutable v) (n + 2) s a -&gt; MaybeT (ST s) ()
+</span><a href="#local-6989586621679165603"><span class="hs-identifier hs-var hs-var">makeDs</span></a></span></span><span> </span><span id="local-6989586621679165579"><span class="annot"><span class="annottext">cs' :: Vector v (n + 1) a
+</span><a href="#local-6989586621679165579"><span class="hs-identifier hs-var">cs'</span></a></span></span><span> </span><span id="local-6989586621679165578"><span class="annot"><span class="annottext">mds :: MVector (Mutable v) (n + 2) s a
+</span><a href="#local-6989586621679165578"><span class="hs-identifier hs-var">mds</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-69"></span><span>      </span><span class="annot"><span class="annottext">ST s () -&gt; MaybeT (ST s) ()
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(ST s () -&gt; MaybeT (ST s) ()) -&gt; ST s () -&gt; MaybeT (ST s) ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (1 + (1 + n)) (PrimState (ST s)) a
+-&gt; (a -&gt; a) -&gt; Finite (1 + (1 + n)) -&gt; ST s ()
+forall (v :: * -&gt; * -&gt; *) (n :: Nat) (m :: * -&gt; *) a.
+(PrimMonad m, MVector v a) =&gt;
+MVector v n (PrimState m) a -&gt; (a -&gt; a) -&gt; Finite n -&gt; m ()
+</span><span class="hs-identifier hs-var">SMVG.modify</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (n + 2) s a
+MVector (Mutable v) (1 + (1 + n)) (PrimState (ST s)) a
+</span><a href="#local-6989586621679165578"><span class="hs-identifier hs-var">mds</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Vector v (1 + (1 + n)) a -&gt; a
+forall (v :: * -&gt; *) (n :: Nat) a.
+Vector v a =&gt;
+Vector v (1 + n) a -&gt; a
+</span><span class="hs-identifier hs-var">SVG.head</span></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 2) a
+Vector v (1 + (1 + n)) a
+</span><a href="#local-6989586621679165615"><span class="hs-identifier hs-var">bs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Finite (1 + (1 + n))
+forall a. Bounded a =&gt; a
+</span><span class="hs-identifier hs-var">minBound</span></span><span>
+</span><span id="line-70"></span><span>      </span><span class="annot"><span class="annottext">[(Finite (n + 1), Finite (1 + (1 + n)))]
+-&gt; ((Finite (n + 1), Finite (1 + (1 + n))) -&gt; MaybeT (ST s) ())
+-&gt; MaybeT (ST s) ()
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+t a -&gt; (a -&gt; f b) -&gt; f ()
+</span><span class="hs-identifier hs-var">for_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KnownNat (n + 1) =&gt; [(Finite (n + 1), Finite ((n + 1) + 1))]
+forall (n :: Nat). KnownNat n =&gt; [(Finite n, Finite (n + 1))]
+</span><a href="Numeric.EMD.Internal.Tridiagonal.html#consecFinites"><span class="hs-identifier hs-var">consecFinites</span></a></span><span> </span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679165618"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">+</span></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(((Finite (n + 1), Finite (1 + (1 + n))) -&gt; MaybeT (ST s) ())
+ -&gt; MaybeT (ST s) ())
+-&gt; ((Finite (n + 1), Finite (1 + (1 + n))) -&gt; MaybeT (ST s) ())
+-&gt; MaybeT (ST s) ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679165577"><span class="annot"><span class="annottext">i0 :: Finite (n + 1)
+</span><a href="#local-6989586621679165577"><span class="hs-identifier hs-var">i0</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679165576"><span class="annot"><span class="annottext">i1 :: Finite (1 + (1 + n))
+</span><a href="#local-6989586621679165576"><span class="hs-identifier hs-var">i1</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-71"></span><span>        </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679165575"><span class="annot"><span class="annottext">c0 :: a
+</span><a href="#local-6989586621679165575"><span class="hs-identifier hs-var hs-var">c0</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a
+</span><a href="#local-6989586621679165579"><span class="hs-identifier hs-var">cs'</span></a></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a -&gt; Finite (n + 1) -&gt; a
+forall (v :: * -&gt; *) (n :: Nat) a.
+Vector v a =&gt;
+Vector v n a -&gt; Finite n -&gt; a
+</span><span class="hs-operator hs-var">`SVG.index`</span></span><span> </span><span class="annot"><span class="annottext">Finite (n + 1)
+</span><a href="#local-6989586621679165577"><span class="hs-identifier hs-var">i0</span></a></span><span>
+</span><span id="line-72"></span><span>        </span><span id="local-6989586621679165574"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165574"><span class="hs-identifier hs-var">d0</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ST s a -&gt; MaybeT (ST s) a
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(ST s a -&gt; MaybeT (ST s) a) -&gt; ST s a -&gt; MaybeT (ST s) a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (1 + (1 + n)) (PrimState (ST s)) a
+-&gt; Finite (1 + (1 + n)) -&gt; ST s a
+forall (v :: * -&gt; * -&gt; *) (n :: Nat) (m :: * -&gt; *) a.
+(PrimMonad m, MVector v a) =&gt;
+MVector v n (PrimState m) a -&gt; Finite n -&gt; m a
+</span><span class="hs-identifier hs-var">SMVG.read</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (n + 2) s a
+MVector (Mutable v) (1 + (1 + n)) (PrimState (ST s)) a
+</span><a href="#local-6989586621679165578"><span class="hs-identifier hs-var">mds</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Finite (n + 1) -&gt; Finite ((n + 1) + 1)
+forall (n :: Nat). Finite n -&gt; Finite (n + 1)
+</span><span class="hs-identifier hs-var">weaken</span></span><span> </span><span class="annot"><span class="annottext">Finite (n + 1)
+</span><a href="#local-6989586621679165577"><span class="hs-identifier hs-var">i0</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span>        </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679165573"><span class="annot"><span class="annottext">sbr :: a
+</span><a href="#local-6989586621679165573"><span class="hs-identifier hs-var hs-var">sbr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a
+</span><a href="#local-6989586621679165616"><span class="hs-keyword hs-var">as</span></a></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a -&gt; Finite (n + 1) -&gt; a
+forall (v :: * -&gt; *) (n :: Nat) a.
+Vector v a =&gt;
+Vector v n a -&gt; Finite n -&gt; a
+</span><span class="hs-operator hs-var">`SVG.index`</span></span><span> </span><span class="annot"><span class="annottext">Finite (n + 1)
+</span><a href="#local-6989586621679165577"><span class="hs-identifier hs-var">i0</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165574"><span class="hs-identifier hs-var">d0</span></a></span><span>
+</span><span id="line-74"></span><span>            </span><span id="local-6989586621679165572"><span class="annot"><span class="annottext">dvr :: a
+</span><a href="#local-6989586621679165572"><span class="hs-identifier hs-var hs-var">dvr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Vector v (n + 2) a
+Vector v (1 + (1 + n)) a
+</span><a href="#local-6989586621679165615"><span class="hs-identifier hs-var">bs</span></a></span><span> </span><span class="annot"><span class="annottext">Vector v (1 + (1 + n)) a -&gt; Finite (1 + (1 + n)) -&gt; a
+forall (v :: * -&gt; *) (n :: Nat) a.
+Vector v a =&gt;
+Vector v n a -&gt; Finite n -&gt; a
+</span><span class="hs-operator hs-var">`SVG.index`</span></span><span> </span><span class="annot"><span class="annottext">Finite (1 + (1 + n))
+</span><a href="#local-6989586621679165576"><span class="hs-identifier hs-var">i1</span></a></span><span>
+</span><span id="line-75"></span><span>                </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a
+</span><a href="#local-6989586621679165616"><span class="hs-keyword hs-var">as</span></a></span><span> </span><span class="annot"><span class="annottext">Vector v (n + 1) a -&gt; Finite (n + 1) -&gt; a
+forall (v :: * -&gt; *) (n :: Nat) a.
+Vector v a =&gt;
+Vector v n a -&gt; Finite n -&gt; a
+</span><span class="hs-operator hs-var">`SVG.index`</span></span><span> </span><span class="annot"><span class="annottext">Finite (n + 1)
+</span><a href="#local-6989586621679165577"><span class="hs-identifier hs-var">i0</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165575"><span class="hs-identifier hs-var">c0</span></a></span><span>
+</span><span id="line-76"></span><span>        </span><span class="annot"><span class="annottext">Bool -&gt; MaybeT (ST s) ()
+forall (f :: * -&gt; *). Alternative f =&gt; Bool -&gt; f ()
+</span><span class="hs-identifier hs-var">guard</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; MaybeT (ST s) ()) -&gt; Bool -&gt; MaybeT (ST s) ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165572"><span class="hs-identifier hs-var">dvr</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="hs-number">0</span></span><span>
+</span><span id="line-77"></span><span>        </span><span class="annot"><span class="annottext">ST s () -&gt; MaybeT (ST s) ()
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(ST s () -&gt; MaybeT (ST s) ()) -&gt; ST s () -&gt; MaybeT (ST s) ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (1 + (1 + n)) (PrimState (ST s)) a
+-&gt; (a -&gt; a) -&gt; Finite (1 + (1 + n)) -&gt; ST s ()
+forall (v :: * -&gt; * -&gt; *) (n :: Nat) (m :: * -&gt; *) a.
+(PrimMonad m, MVector v a) =&gt;
+MVector v n (PrimState m) a -&gt; (a -&gt; a) -&gt; Finite n -&gt; m ()
+</span><span class="hs-identifier hs-var">SMVG.modify</span></span><span> </span><span class="annot"><span class="annottext">MVector (Mutable v) (n + 2) s a
+MVector (Mutable v) (1 + (1 + n)) (PrimState (ST s)) a
+</span><a href="#local-6989586621679165578"><span class="hs-identifier hs-var">mds</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165572"><span class="hs-identifier hs-var">dvr</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(a -&gt; a) -&gt; (a -&gt; a) -&gt; a -&gt; a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">subtract</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679165573"><span class="hs-identifier hs-var">sbr</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Finite (1 + (1 + n))
+</span><a href="#local-6989586621679165576"><span class="hs-identifier hs-var">i1</span></a></span><span>
+</span><span id="line-78"></span><span>
+</span><span id="line-79"></span><span id="local-6989586621679165651"><span class="annot"><a href="Numeric.EMD.Internal.Tridiagonal.html#consecFinites"><span class="hs-identifier hs-type">consecFinites</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KnownNat</span></span><span> </span><span class="annot"><a href="#local-6989586621679165651"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Finite</span></span><span> </span><span class="annot"><a href="#local-6989586621679165651"><span class="hs-identifier hs-type">n</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Finite</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679165651"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">+</span></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-80"></span><span id="consecFinites"><span class="annot"><span class="annottext">consecFinites :: [(Finite n, Finite (n + 1))]
+</span><a href="Numeric.EMD.Internal.Tridiagonal.html#consecFinites"><span class="hs-identifier hs-var hs-var">consecFinites</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Finite n] -&gt; [Finite (n + 1)] -&gt; [(Finite n, Finite (n + 1))]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[Finite n]
+forall (n :: Nat). KnownNat n =&gt; [Finite n]
+</span><span class="hs-identifier hs-var">finites</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Finite (n + 1)] -&gt; [Finite (n + 1)]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">tail</span></span><span> </span><span class="annot"><span class="annottext">[Finite (n + 1)]
+forall (n :: Nat). KnownNat n =&gt; [Finite n]
+</span><span class="hs-identifier hs-var">finites</span></span><span class="hs-special">)</span><span>
+</span><span id="line-81"></span></pre></body></html>
