@@ -7,7 +7,7 @@
 --   Empirical Mode decomposition and Hilbert-Huang Transform in pure
 --   Haskell.
 @package emd
-@version 0.1.7.0
+@version 0.1.7.1
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -275,13 +275,22 @@ hhtSparseSpectrum :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (
 --   discrete slots, for accumulation in the dense matrix.
 hhtDenseSpectrum :: forall v n m a. (Vector v a, KnownNat n, KnownNat m, Num a) => (a -> Finite m) -> HHT v n a -> Vector n (Vector m a)
 
--- | Compute the marginal spectrum given a Hilbert-Huang Transform. It is
---   similar to a Fourier Transform; it provides the "total power" over the
---   entire time series for each frequency component.
+-- | Compute the mean marginal spectrum given a Hilbert-Huang Transform. It
+--   is similar to a Fourier Transform; it provides the "total power" over
+--   the entire time series for each frequency component, averaged over the
+--   length of the time series.
 --   
 --   A binning function is accepted to allow you to specify how specific
 --   you want your frequencies to be.
-marginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Map k a
+meanMarginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Fractional a) => (a -> k) -> HHT v n a -> Map k a
+
+-- | Compute the mean marginal spectrum given a Hilbert-Huang Transform. It
+--   is similar to a Fourier Transform; it provides the "total power" over
+--   the entire time series for each frequency component, averaged over the
+--   length of the time series.
+--   
+--   A binning function is accepted to allow you to specify how specific
+--   you want your frequencies to be.
 meanMarginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Fractional a) => (a -> k) -> HHT v n a -> Map k a
 
 -- | Compute the instantaneous energy of the time series at every step via
