@@ -273,7 +273,7 @@ instantaneousEnergy = foldFreq (\_ x -> Sum (x * x)) getSum
 
 -- | Degree of stationarity, as a function of frequency.
 degreeOfStationarity
-    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Fractional a, Eq a)
+    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Fractional a, Ord a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
     -> HHT v n a
     -> M.Map k a
