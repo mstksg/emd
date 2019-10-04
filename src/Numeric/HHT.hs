@@ -288,9 +288,9 @@ degreeOfStationarity f h = M.unionsWith (+)
         let fr = f $ hlFreqs `SVG.index` i
             mm = meanMarg M.! fr
         in  M.singleton fr $
-              if mm == 0
+              if abs mm < 0.00001
                 then 1
-                else (1 - (hlMags `SVG.index` i / meanMarg M.! fr)) ^ (2 :: Int)
+                else (1 - (hlMags `SVG.index` i / mm)) ^ (2 :: Int)
 
 -- | Given a time series, return a time series of the /magnitude/ of the
 -- hilbert transform and the /frequency/ of the hilbert transform, in units
