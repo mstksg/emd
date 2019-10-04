@@ -216,12 +216,13 @@ hhtDenseSpectrum f h = SV.generate $ \i -> SV.generate $ \j ->
 -- A binning function is accepted to allow you to specify how specific you
 -- want your frequencies to be.
 marginal
-    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Num a)
+    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Fractional a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
     -> HHT v n a
     -> M.Map k a
-marginal f = M.unionsWith (+) . concatMap go . hhtLines
+marginal f = fmap (/ n) . M.unionsWith (+) . concatMap go . hhtLines
   where
+    n = fromIntegral $ natVal (Proxy @n)
     go :: HHTLine v n a -> [M.Map k a]
     go HHTLine{..} = flip fmap (finites @n) $ \i ->
       M.singleton (f $ hlFreqs `SVG.index` i) (hlMags `SVG.index` i)

@@ -5,12 +5,19 @@
 
 packages:
 - completed:
-    hackage: vector-sized-1.4.0.0@sha256:8c2df1e748bfbab86e177934519995f5c5da66ea0df481104e1dcdc2f7c1a831,1681
+    hackage: constraints-extras-0.3.0.2@sha256:bf6884be65958e9188ae3c9e5547abfd6d201df021bff8a4704c2c4fe1e1ae5b,1784
     pantry-tree:
-      size: 1139
-      sha256: 21759821984ff50c2a5f2f2843bd7f3b46e8bbfcfe25c13ca4d290ad4f2027ee
+      size: 594
+      sha256: b0bcc96d375ee11b1972a2e9e8e42039b3f420b0e1c46e9c70652470445a6505
   original:
-    hackage: vector-sized-1.4.0.0
+    hackage: constraints-extras-0.3.0.2
+- completed:
+    hackage: dependent-sum-0.6.2.0@sha256:bff37c85b38e768b942f9d81c2465b63a96076f1ba006e35612aa357770807b6,1856
+    pantry-tree:
+      size: 474
+      sha256: ad3fbed5104f9ee9c8082c9dcc8ade847674e3053572533e8d26ad1a866f1107
+  original:
+    hackage: dependent-sum-0.6.2.0
 - completed:
     hackage: indexed-list-literals-0.2.1.2@sha256:8cca1b63332948ced0cd48d776b103add06de0180d153d60dd69945105af10a5,2464
     pantry-tree:
@@ -18,9 +25,23 @@ packages:
       sha256: d1890c0ebaaacacd9ec849ed16bc29182314159745658c8c719b6ed684617c68
   original:
     hackage: indexed-list-literals-0.2.1.2
+- completed:
+    hackage: typelits-witnesses-0.4.0.0@sha256:1d7092ba98fdc33f4b413e04144eb3ead7b105f74b2998e3c74a8a0feee685a9,1985
+    pantry-tree:
+      size: 403
+      sha256: 2ee741f6bb4dba710e6449da335fdcf8940adb767798b29fdb8ae2606d22e0cb
+  original:
+    hackage: typelits-witnesses-0.4.0.0
+- completed:
+    hackage: vector-sized-1.4.0.0@sha256:8c2df1e748bfbab86e177934519995f5c5da66ea0df481104e1dcdc2f7c1a831,1681
+    pantry-tree:
+      size: 1139
+      sha256: 21759821984ff50c2a5f2f2843bd7f3b46e8bbfcfe25c13ca4d290ad4f2027ee
+  original:
+    hackage: vector-sized-1.4.0.0
 snapshots:
 - completed:
-    size: 513872
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2019/6/28.yaml
-    sha256: 60d99bc77de2ab71baaf7114873210155f84e8ae78350f113a1e6307a6b1995c
-  original: nightly-2019-06-28
+    size: 329708
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2019/9/29.yaml
+    sha256: ecbe5193ed2c0f2773327a3dac9337bae7736c3b473eb7f8a73c35cc05896894
+  original: nightly-2019-09-29
