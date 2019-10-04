@@ -37,7 +37,7 @@ module Numeric.HHT (
   -- ** Hilbert-Huang Spectrum
   , hhtSpectrum, hhtSparseSpectrum, hhtDenseSpectrum
   -- ** Properties of spectrum
-  , meanMarginal, meanMarginal, instantaneousEnergy, degreeOfStationarity
+  , meanMarginal, marginal, instantaneousEnergy, degreeOfStationarity
   , expectedFreq, dominantFreq
   , foldFreq
   -- ** Options

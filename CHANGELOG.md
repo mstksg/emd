@@ -14,6 +14,8 @@ Version 0.1.8.0
     functions in terms of it.
 *   Drop support for GHC 8.2 and lower.
 
+*   *0.1.8.1*: Exported `marginal` again; it was unexported by mistake.
+
 Version 0.1.7.0
 ---------------
 
