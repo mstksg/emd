@@ -291,7 +291,7 @@ degreeOfStationarity f h = fmap (/ n)
             mm = meanMarg M.! fr
         in  M.singleton fr $
               if mm == 0
-                then 1
+                then 0
                 else (1 - (hlMags `SVG.index` i / mm)) ^ (2 :: Int)
 
 -- | Given a time series, return a time series of the /magnitude/ of the
