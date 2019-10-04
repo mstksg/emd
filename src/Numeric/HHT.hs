@@ -37,7 +37,7 @@ module Numeric.HHT (
   -- ** Hilbert-Huang Spectrum
   , hhtSpectrum, hhtSparseSpectrum, hhtDenseSpectrum
   -- ** Properties of spectrum
-  , marginal, instantaneousEnergy, degreeOfStationarity
+  , marginal, meanMarginal, instantaneousEnergy, degreeOfStationarity
   , expectedFreq, dominantFreq
   , foldFreq
   -- ** Options
@@ -216,16 +216,24 @@ hhtDenseSpectrum f h = SV.generate $ \i -> SV.generate $ \j ->
 -- A binning function is accepted to allow you to specify how specific you
 -- want your frequencies to be.
 marginal
+    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Num a)
+    => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
+    -> HHT v n a
+    -> M.Map k a
+marginal f = M.unionsWith (+) . concatMap go . hhtLines
+  where
+    go :: HHTLine v n a -> [M.Map k a]
+    go HHTLine{..} = flip fmap (finites @n) $ \i ->
+      M.singleton (f $ hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
+
+meanMarginal
     :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Fractional a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
     -> HHT v n a
     -> M.Map k a
-marginal f = fmap (/ n) . M.unionsWith (+) . concatMap go . hhtLines
+meanMarginal f = fmap (/ n) . marginal f
   where
     n = fromIntegral $ natVal (Proxy @n)
-    go :: HHTLine v n a -> [M.Map k a]
-    go HHTLine{..} = flip fmap (finites @n) $ \i ->
-      M.singleton (f $ hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
 
 -- | Returns the "expected value" of frequency at each time step,
 -- calculated as a weighted average of all contributions at every frequency
@@ -265,7 +273,7 @@ instantaneousEnergy = foldFreq (\_ x -> Sum (x * x)) getSum
 
 -- | Degree of stationarity, as a function of frequency.
 degreeOfStationarity
-    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Fractional a)
+    :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Fractional a, Eq a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.
     -> HHT v n a
     -> M.Map k a
@@ -274,12 +282,15 @@ degreeOfStationarity f h = M.unionsWith (+)
                          . hhtLines
                          $ h
   where
-    meanMarg = (/ fromIntegral (natVal (Proxy @n))) <$> marginal f h
+    meanMarg = meanMarginal f h
     go :: HHTLine v n a -> [M.Map k a]
     go HHTLine{..} = flip fmap (finites @n) $ \i ->
         let fr = f $ hlFreqs `SVG.index` i
-        in M.singleton fr $
-              (1 - (hlMags `SVG.index` i / meanMarg M.! fr)) ^ (2 :: Int)
+            mm = meanMarg M.! fr
+        in  M.singleton fr $
+              if mm == 0
+                then 1
+                else (1 - (hlMags `SVG.index` i / meanMarg M.! fr)) ^ (2 :: Int)
 
 -- | Given a time series, return a time series of the /magnitude/ of the
 -- hilbert transform and the /frequency/ of the hilbert transform, in units
