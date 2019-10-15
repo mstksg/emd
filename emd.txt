@@ -238,6 +238,15 @@ data HHTLine v n a
 HHTLine :: !Vector v (n + 1) a -> !Vector v n a -> !a -> HHTLine v n a
 
 -- | IMF HHT Magnitude as a time series.
+--   
+--   It may be useful to "zip" this vector with <a>hlFreqs</a>. To do this,
+--   use a function like <a>init</a> or <a>tail</a> to make these two
+--   vectors contain the same length, or <a>weaken</a>/<a>shift</a> to make
+--   indices in <a>hlFreqs</a> usable as indices in <a>hlMags</a>.
+--   
+--   Prior to v0.1.9.0, this was a length-n vector, just like
+--   <a>hlFreqs</a>. To get the same behavior, use <a>init</a> on this new
+--   field's value.
 [hlMags] :: HHTLine v n a -> !Vector v (n + 1) a
 
 -- | IMF HHT instantaneous frequency as a time series (between 0 and 1).
