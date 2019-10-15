@@ -34,6 +34,8 @@ module Numeric.HHT (
     HHT(..), HHTLine(..)
   , hhtEmd
   , hht
+  , ihhtEmd
+  , ihht
   -- ** Hilbert-Huang Spectrum
   , hhtSpectrum, hhtSparseSpectrum, hhtDenseSpectrum
   -- ** Properties of spectrum
@@ -69,9 +71,12 @@ import qualified Math.FFT.Base             as FFT
 
 -- | A Hilbert Trasnform of a given IMF, given as a "skeleton line".
 data HHTLine v n a = HHTLine
-    { -- | IMF HHT Magnitude as a time series
-      hlMags      :: !(SVG.Vector v n a)
-      -- | IMF HHT instantaneous frequency as a time series (between 0 and 1)
+    { -- | IMF HHT Magnitude as a time series.
+      hlMags      :: !(SVG.Vector v (n + 1) a)
+      -- | IMF HHT instantaneous frequency as a time series (between 0 and 1).
+      --
+      -- In reality, these frequencies are the frequencies "in between"
+      -- each step in 'hlMags'.
     , hlFreqs     :: !(SVG.Vector v n a)
       -- | Initial phase of skeleton line (between -pi and pi)
       --
@@ -81,15 +86,7 @@ data HHTLine v n a = HHTLine
   deriving (Show, Eq, Ord, Generic)
 
 -- | @since 0.1.3.0
-instance (VG.Vector v a, KnownNat n, Bi.Binary (v a), Bi.Binary a) => Bi.Binary (HHTLine v n a) where
-    put HHTLine{..} = Bi.put (SVG.fromSized hlMags )
-                   *> Bi.put (SVG.fromSized hlFreqs)
-                   *> Bi.put hlInitPhase
-    get = do
-      Just hlMags      <- SVG.toSized <$> Bi.get
-      Just hlFreqs     <- SVG.toSized <$> Bi.get
-      Just hlInitPhase <- Bi.get
-      pure HHTLine{..}
+instance (VG.Vector v a, KnownNat n, Bi.Binary (v a), Bi.Binary a) => Bi.Binary (HHTLine v n a)
 
 -- | @since 0.1.5.0
 instance (NFData (v a), NFData a) => NFData (HHTLine v n a)
@@ -99,7 +96,14 @@ instance (NFData (v a), NFData a) => NFData (HHTLine v n a)
 -- using vector @v@.
 --
 -- Create using 'hht' or 'hhtEmd'.
-newtype HHT v n a = HHT { hhtLines :: [HHTLine v n a] }
+data HHT v n a = HHT
+    { -- | Skeleton lines corresponding to each IMF
+      hhtLines    :: [HHTLine v n a]
+      -- | Residual from EMD
+      --
+      -- @since 0.1.9.0
+    , hhtResidual :: SVG.Vector v (n + 1) a
+    }
   deriving (Show, Eq, Ord, Generic)
 
 -- | @since 0.1.3.0
@@ -123,11 +127,34 @@ hhtEmd
     :: forall v n a. (VG.Vector v a, VG.Vector v (Complex a), KnownNat n, FFT.FFTWReal a)
     => EMD v (n + 1) a
     -> HHT v n a
-hhtEmd EMD{..} = HHT $ map go emdIMFs
+hhtEmd EMD{..} = HHT (map go emdIMFs) emdResidual
   where
-    go i = HHTLine (SVG.init m) f φ0
+    go i = HHTLine m f φ0
       where
         (m, (f, φ0)) = hilbertMagFreq i
+
+-- | Invert a Hilbert-Huang transform back to an Empirical Mode
+-- Decomposition
+--
+-- @since 0.1.9.0
+ihhtEmd
+    :: (VG.Vector v a, Floating a)
+    => HHT v n a
+    -> EMD v (n + 1) a
+ihhtEmd HHT{..} = EMD (map go hhtLines) hhtResidual
+  where
+    go HHTLine{..} = SVG.zipWith (\m θ -> m * cos θ) hlMags θs
+      where
+        θs = SVG.scanl' (+) hlInitPhase ((* (2 * pi)) `SVG.map` hlFreqs)
+
+-- | Construct a time series correpsonding to its hilbert-huang transform.
+--
+-- @since 0.1.9.0
+ihht
+    :: (VG.Vector v a, Floating a)
+    => HHT v n a
+    -> SVG.Vector v (n + 1) a
+ihht = iemd . ihhtEmd
 
 -- | Fold and collapse a Hilbert-Huang transform along the frequency axis
 -- at each step in time along some monoid.
@@ -146,7 +173,7 @@ foldFreq f g = pullBack
   where
     split :: HHTLine v n a -> SV.Vector n b
     split HHTLine{..} = SVG.generate $ \i ->
-      f (hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
+      f (hlFreqs `SVG.index` i) (hlMags `SVG.index` weaken i)
     {-# INLINE split #-}
     pullBack :: SV.Vector n b -> SVG.Vector u n c
     pullBack v = SVG.generate $ \i -> g (v `SV.index` i)
@@ -195,7 +222,7 @@ hhtSparseSpectrum f = M.unionsWith (+) . concatMap go . hhtLines
     go :: HHTLine v n a -> [M.Map (Finite n, k) a]
     go HHTLine{..} = flip fmap (finites @n) $ \i ->
       M.singleton (i, f $ hlFreqs `SVG.index` i) $
-        hlMags `SVG.index` i
+        hlMags `SVG.index` weaken i
 
 -- | A denser version of 'hhtSpectrum'.  Compute the full  Hilbert-Huang
 -- Transform spectrum, returning a dense matrix (as a vector of vectors)
@@ -232,7 +259,7 @@ marginal f = M.unionsWith (+) . concatMap go . hhtLines
   where
     go :: HHTLine v n a -> [M.Map k a]
     go HHTLine{..} = flip fmap (finites @n) $ \i ->
-      M.singleton (f $ hlFreqs `SVG.index` i) (hlMags `SVG.index` i)
+      M.singleton (f $ hlFreqs `SVG.index` i) (hlMags `SVG.index` weaken i)
 
 -- | Compute the mean marginal spectrum given a Hilbert-Huang Transform. It
 -- is similar to a Fourier Transform; it provides the "total power" over
@@ -309,7 +336,7 @@ degreeOfStationarity f h = fmap (/ n)
         in  M.singleton fr $
               if mm == 0
                 then 0
-                else (1 - (hlMags `SVG.index` i / mm)) ^ (2 :: Int)
+                else (1 - (hlMags `SVG.index` weaken i / mm)) ^ (2 :: Int)
 
 -- | Given a time series, return a time series of the /magnitude/ of the
 -- hilbert transform and the /frequency/ of the hilbert transform, in units
@@ -355,7 +382,6 @@ hilbertPolar v = (hilbertMag, hilbertPhase)
     (hilbertMag, (hilbertFreq, φ0)) = hilbertMagFreq v
     hilbertPhase :: SVG.Vector v (n + 1) a
     hilbertPhase = SVG.scanl' (+) φ0 ((* (2 * pi)) `SVG.map` hilbertFreq)
-
 
 -- | Real part is original series and imaginary part is hilbert transformed
 -- series.  Creates a "helical" form of the original series that rotates
