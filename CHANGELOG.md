@@ -1,6 +1,22 @@
 Changelog
 =========
 
+Version 0.1.9.0
+---------------
+
+*October 9, 2019*
+
+<https://github.com/mstksg/emd/releases/tag/v0.1.9.0>
+
+*   Added `hlInitPhase` field to `HHTLine`, to denote the initial phase that an
+    HHT Line starts at.
+*   Added `hhtResidual` field to `HHT`, to store the residual of the original
+    EMD.
+*   Add `ihht` and `ihhtEmd`, to invert Hilbert-Huang Transform and reconstruct
+    the original series (or the original EMD).
+*   Begin benchmarking `hht` and `ihht`.
+
+
 Version 0.1.8.0
 ---------------
 
