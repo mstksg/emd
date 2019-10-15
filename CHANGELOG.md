@@ -8,6 +8,8 @@ Version 0.1.9.0
 
 <https://github.com/mstksg/emd/releases/tag/v0.1.9.0>
 
+*   *Breaking*: `hlMags` field in `HHT v n a` now contains `n + 1` items,
+    instead of `n` items.  Use `V.init` to regain the original behavior.
 *   Added `hlInitPhase` field to `HHTLine`, to denote the initial phase that an
     HHT Line starts at.
 *   Added `hhtResidual` field to `HHT`, to store the residual of the original

@@ -72,6 +72,15 @@ import qualified Math.FFT.Base             as FFT
 -- | A Hilbert Trasnform of a given IMF, given as a "skeleton line".
 data HHTLine v n a = HHTLine
     { -- | IMF HHT Magnitude as a time series.
+      --
+      -- It may be useful to "zip" this vector with 'hlFreqs'.  To do this,
+      -- use a function like 'SVG.init' or 'SVG.tail' to make these two
+      -- vectors contain the same length, or 'weaken'/'shift' to make
+      -- indices in 'hlFreqs' usable as indices in 'hlMags'.
+      --
+      -- Prior to v0.1.9.0, this was a length-n vector, just like
+      -- 'hlFreqs'.  To get the same behavior, use 'SVG.init' on this new
+      -- field's value.
       hlMags      :: !(SVG.Vector v (n + 1) a)
       -- | IMF HHT instantaneous frequency as a time series (between 0 and 1).
       --
