@@ -7,7 +7,7 @@
 --   Empirical Mode decomposition and Hilbert-Huang Transform in pure
 --   Haskell.
 @package emd
-@version 0.1.7.1
+@version 0.1.9.0
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -224,19 +224,30 @@ module Numeric.HHT
 --   type <tt>a</tt> represented using vector <tt>v</tt>.
 --   
 --   Create using <a>hht</a> or <a>hhtEmd</a>.
-newtype HHT v n a
-HHT :: [HHTLine v n a] -> HHT v n a
+data HHT v n a
+HHT :: [HHTLine v n a] -> Vector v (n + 1) a -> HHT v n a
+
+-- | Skeleton lines corresponding to each IMF
 [hhtLines] :: HHT v n a -> [HHTLine v n a]
+
+-- | Residual from EMD
+[hhtResidual] :: HHT v n a -> Vector v (n + 1) a
 
 -- | A Hilbert Trasnform of a given IMF, given as a "skeleton line".
 data HHTLine v n a
-HHTLine :: !Vector v n a -> !Vector v n a -> HHTLine v n a
+HHTLine :: !Vector v (n + 1) a -> !Vector v n a -> !a -> HHTLine v n a
 
--- | IMF HHT Magnitude as a time series
-[hlMags] :: HHTLine v n a -> !Vector v n a
+-- | IMF HHT Magnitude as a time series.
+[hlMags] :: HHTLine v n a -> !Vector v (n + 1) a
 
--- | IMF HHT instantaneous frequency as a time series (between 0 and 1)
+-- | IMF HHT instantaneous frequency as a time series (between 0 and 1).
+--   
+--   In reality, these frequencies are the frequencies "in between" each
+--   step in <a>hlMags</a>.
 [hlFreqs] :: HHTLine v n a -> !Vector v n a
+
+-- | Initial phase of skeleton line (between -pi and pi)
+[hlInitPhase] :: HHTLine v n a -> !a
 
 -- | Compute the Hilbert-Huang transform from a given Empirical Mode
 --   Decomposition.
@@ -246,6 +257,13 @@ hhtEmd :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal 
 --   Essentially is a composition of <a>hhtEmd</a> and <a>emd</a>. See
 --   <a>hhtEmd</a> for a more flexible version.
 hht :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => EMDOpts a -> Vector v (n + 1) a -> HHT v n a
+
+-- | Invert a Hilbert-Huang transform back to an Empirical Mode
+--   Decomposition
+ihhtEmd :: (Vector v a, Floating a) => HHT v n a -> EMD v (n + 1) a
+
+-- | Construct a time series correpsonding to its hilbert-huang transform.
+ihht :: (Vector v a, Floating a) => HHT v n a -> Vector v (n + 1) a
 
 -- | Compute the full Hilbert-Huang Transform spectrum. At each timestep is
 --   a sparse map of frequency components and their respective magnitudes.
@@ -284,14 +302,15 @@ hhtDenseSpectrum :: forall v n m a. (Vector v a, KnownNat n, KnownNat m, Num a) 
 --   you want your frequencies to be.
 meanMarginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Fractional a) => (a -> k) -> HHT v n a -> Map k a
 
--- | Compute the mean marginal spectrum given a Hilbert-Huang Transform. It
---   is similar to a Fourier Transform; it provides the "total power" over
---   the entire time series for each frequency component, averaged over the
---   length of the time series.
+-- | Compute the marginal spectrum given a Hilbert-Huang Transform. It
+--   provides the "total power" over the entire time series for each
+--   frequency component. See <a>meanMarginal</a> for a version that
+--   averages over the length of the time series, making it more close in
+--   nature to the purpose of a Fourier Transform.
 --   
 --   A binning function is accepted to allow you to specify how specific
 --   you want your frequencies to be.
-meanMarginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Fractional a) => (a -> k) -> HHT v n a -> Map k a
+marginal :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Map k a
 
 -- | Compute the instantaneous energy of the time series at every step via
 --   the Hilbert-Huang Transform.
@@ -409,9 +428,6 @@ hilbertIm :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWRe
 --   <i>minimal valid phase</i> such that &lt;math&gt;. This enforces the
 --   phase to be monotonically increasing at the slowest possible
 --   detectable rate.
---   
---   Note that this function effectively resets the initial phase to be
---   zero, conceptually rotating <a>hilbert</a> to begin on the real axis.
 hilbertPolar :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => Vector v (n + 1) a -> (Vector v (n + 1) a, Vector v (n + 1) a)
 
 -- | Given a time series, return a time series of the <i>magnitude</i> of
@@ -422,18 +438,18 @@ hilbertPolar :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFT
 --   The frequency will always be between 0 and 1, since we can't determine
 --   anything faster given the discretization, and we exclude negative
 --   values as physically unmeaningful for an IMF.
-hilbertMagFreq :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => Vector v (n + 1) a -> (Vector v (n + 1) a, Vector v n a)
+hilbertMagFreq :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => Vector v (n + 1) a -> (Vector v (n + 1) a, (Vector v n a, a))
 instance GHC.Generics.Generic (Numeric.HHT.HHT v n a)
-instance GHC.Classes.Ord (v a) => GHC.Classes.Ord (Numeric.HHT.HHT v n a)
-instance GHC.Classes.Eq (v a) => GHC.Classes.Eq (Numeric.HHT.HHT v n a)
-instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.HHT.HHT v n a)
+instance (GHC.Classes.Ord a, GHC.Classes.Ord (v a)) => GHC.Classes.Ord (Numeric.HHT.HHT v n a)
+instance (GHC.Classes.Eq a, GHC.Classes.Eq (v a)) => GHC.Classes.Eq (Numeric.HHT.HHT v n a)
+instance (GHC.Show.Show a, GHC.Show.Show (v a)) => GHC.Show.Show (Numeric.HHT.HHT v n a)
 instance GHC.Generics.Generic (Numeric.HHT.HHTLine v n a)
-instance GHC.Classes.Ord (v a) => GHC.Classes.Ord (Numeric.HHT.HHTLine v n a)
-instance GHC.Classes.Eq (v a) => GHC.Classes.Eq (Numeric.HHT.HHTLine v n a)
-instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.HHT.HHTLine v n a)
+instance (GHC.Classes.Ord a, GHC.Classes.Ord (v a)) => GHC.Classes.Ord (Numeric.HHT.HHTLine v n a)
+instance (GHC.Classes.Eq a, GHC.Classes.Eq (v a)) => GHC.Classes.Eq (Numeric.HHT.HHTLine v n a)
+instance (GHC.Show.Show a, GHC.Show.Show (v a)) => GHC.Show.Show (Numeric.HHT.HHTLine v n a)
 instance (GHC.Classes.Ord k, GHC.Num.Num a) => GHC.Base.Semigroup (Numeric.HHT.SumMap k a)
 instance (GHC.Classes.Ord k, GHC.Num.Num a) => GHC.Base.Monoid (Numeric.HHT.SumMap k a)
-instance (Data.Vector.Generic.Base.Vector v a, GHC.TypeNats.KnownNat n, Data.Binary.Class.Binary (v a)) => Data.Binary.Class.Binary (Numeric.HHT.HHT v n a)
-instance Control.DeepSeq.NFData (v a) => Control.DeepSeq.NFData (Numeric.HHT.HHT v n a)
-instance (Data.Vector.Generic.Base.Vector v a, GHC.TypeNats.KnownNat n, Data.Binary.Class.Binary (v a)) => Data.Binary.Class.Binary (Numeric.HHT.HHTLine v n a)
-instance Control.DeepSeq.NFData (v a) => Control.DeepSeq.NFData (Numeric.HHT.HHTLine v n a)
+instance (Data.Vector.Generic.Base.Vector v a, GHC.TypeNats.KnownNat n, Data.Binary.Class.Binary (v a), Data.Binary.Class.Binary a) => Data.Binary.Class.Binary (Numeric.HHT.HHT v n a)
+instance (Control.DeepSeq.NFData (v a), Control.DeepSeq.NFData a) => Control.DeepSeq.NFData (Numeric.HHT.HHT v n a)
+instance (Data.Vector.Generic.Base.Vector v a, GHC.TypeNats.KnownNat n, Data.Binary.Class.Binary (v a), Data.Binary.Class.Binary a) => Data.Binary.Class.Binary (Numeric.HHT.HHTLine v n a)
+instance (Control.DeepSeq.NFData (v a), Control.DeepSeq.NFData a) => Control.DeepSeq.NFData (Numeric.HHT.HHTLine v n a)
