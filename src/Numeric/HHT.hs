@@ -70,23 +70,29 @@ import qualified Math.FFT.Base             as FFT
 -- | A Hilbert Trasnform of a given IMF, given as a "skeleton line".
 data HHTLine v n a = HHTLine
     { -- | IMF HHT Magnitude as a time series
-      hlMags  :: !(SVG.Vector v n a)
+      hlMags      :: !(SVG.Vector v n a)
       -- | IMF HHT instantaneous frequency as a time series (between 0 and 1)
-    , hlFreqs :: !(SVG.Vector v n a)
+    , hlFreqs     :: !(SVG.Vector v n a)
+      -- | Initial phase of skeleton line (between -pi and pi)
+      --
+      -- @since 0.1.9.0
+    , hlInitPhase :: !a
     }
   deriving (Show, Eq, Ord, Generic)
 
 -- | @since 0.1.3.0
-instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (HHTLine v n a) where
+instance (VG.Vector v a, KnownNat n, Bi.Binary (v a), Bi.Binary a) => Bi.Binary (HHTLine v n a) where
     put HHTLine{..} = Bi.put (SVG.fromSized hlMags )
                    *> Bi.put (SVG.fromSized hlFreqs)
+                   *> Bi.put hlInitPhase
     get = do
-      Just hlMags  <- SVG.toSized <$> Bi.get
-      Just hlFreqs <- SVG.toSized <$> Bi.get
+      Just hlMags      <- SVG.toSized <$> Bi.get
+      Just hlFreqs     <- SVG.toSized <$> Bi.get
+      Just hlInitPhase <- Bi.get
       pure HHTLine{..}
 
 -- | @since 0.1.5.0
-instance NFData (v a) => NFData (HHTLine v n a)
+instance (NFData (v a), NFData a) => NFData (HHTLine v n a)
 
 -- | A Hilbert-Huang Transform.  An @'HHT' v n a@ is a Hilbert-Huang
 -- transform of an @n@-item time series of items of type @a@ represented
@@ -97,10 +103,10 @@ newtype HHT v n a = HHT { hhtLines :: [HHTLine v n a] }
   deriving (Show, Eq, Ord, Generic)
 
 -- | @since 0.1.3.0
-instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (HHT v n a)
+instance (VG.Vector v a, KnownNat n, Bi.Binary (v a), Bi.Binary a) => Bi.Binary (HHT v n a)
 
 -- | @since 0.1.5.0
-instance NFData (v a) => NFData (HHT v n a)
+instance (NFData (v a), NFData a) => NFData (HHT v n a)
 
 -- | Directly compute the Hilbert-Huang transform of a given time series.
 -- Essentially is a composition of 'hhtEmd' and 'emd'.  See 'hhtEmd' for
@@ -119,9 +125,9 @@ hhtEmd
     -> HHT v n a
 hhtEmd EMD{..} = HHT $ map go emdIMFs
   where
-    go i = HHTLine (SVG.init m) f
+    go i = HHTLine (SVG.init m) f φ0
       where
-        (m, f) = hilbertMagFreq i
+        (m, (f, φ0)) = hilbertMagFreq i
 
 -- | Fold and collapse a Hilbert-Huang transform along the frequency axis
 -- at each step in time along some monoid.
@@ -316,12 +322,13 @@ degreeOfStationarity f h = fmap (/ n)
 hilbertMagFreq
     :: forall v n a. (VG.Vector v a, VG.Vector v (Complex a), KnownNat n, FFT.FFTWReal a)
     => SVG.Vector v (n + 1) a
-    -> (SVG.Vector v (n + 1) a, SVG.Vector v n a)
-hilbertMagFreq v = (hilbertMag, hilbertFreq)
+    -> (SVG.Vector v (n + 1) a, (SVG.Vector v n a, a))
+hilbertMagFreq v = (hilbertMag, (hilbertFreq, φ0))
   where
     v'           = hilbert v
     hilbertMag   = SVG.map magnitude v'
     hilbertPhase = SVG.map phase v'
+    φ0           = SVG.head hilbertPhase
     hilbertFreq  = SVG.map ((`mod'` 1) . (/ (2 * pi))) $ SVG.tail hilbertPhase - SVG.init hilbertPhase
 
 -- | The polar form of 'hilbert': returns the magnitude and phase of the
@@ -336,9 +343,6 @@ hilbertMagFreq v = (hilbertMag, hilbertFreq)
 -- enforces the phase to be monotonically increasing at the slowest
 -- possible detectable rate.
 --
--- Note that this function effectively resets the initial phase to be zero,
--- conceptually rotating 'hilbert' to begin on the real axis.
---
 -- @since 0.1.6.0
 hilbertPolar
     :: forall v n a. (VG.Vector v a, VG.Vector v (Complex a), KnownNat n, FFT.FFTWReal a)
@@ -348,9 +352,9 @@ hilbertPolar v = (hilbertMag, hilbertPhase)
   where
     hilbertMag :: SVG.Vector v (n + 1) a
     hilbertFreq :: SVG.Vector v n a
-    (hilbertMag, hilbertFreq) = hilbertMagFreq v
+    (hilbertMag, (hilbertFreq, φ0)) = hilbertMagFreq v
     hilbertPhase :: SVG.Vector v (n + 1) a
-    hilbertPhase = SVG.scanl' (+) 0 hilbertFreq
+    hilbertPhase = SVG.scanl' (+) φ0 ((* (2 * pi)) `SVG.map` hilbertFreq)
 
 
 -- | Real part is original series and imaginary part is hilbert transformed
