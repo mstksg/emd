@@ -11,6 +11,7 @@ import           Data.Char
 import           Data.Complex
 import           GHC.TypeNats
 import           Numeric.EMD
+import           Numeric.HHT
 import           Statistics.Transform
 import           Text.Printf
 import qualified Data.Vector          as UV
@@ -34,6 +35,11 @@ main = do
     itest4096  <- evaluate . force $ emd defaultEO test4096
     itest16384 <- evaluate . force $ emd defaultEO test16384
 
+    htest256   <- evaluate . force $ hhtEmd itest256
+    htest1024  <- evaluate . force $ hhtEmd itest1024
+    htest4096  <- evaluate . force $ hhtEmd itest4096
+    htest16384 <- evaluate . force $ hhtEmd itest16384
+
     let imfs256   = length . emdIMFs $ itest256
         imfs1024  = length . emdIMFs $ itest1024
         imfs4096  = length . emdIMFs $ itest4096
@@ -46,11 +52,23 @@ main = do
           , bench (printf "4096 (%d imfs)"  imfs4096 ) $ nf (emd defaultEO) test4096
           , bench (printf "16384 (%d imfs)" imfs16384) $ nf (emd defaultEO) test16384
           ]
+      , bgroup "hht"
+          [ bench "256"   $ nf hhtEmd itest256
+          , bench "1024"  $ nf hhtEmd itest1024
+          , bench "4096"  $ nf hhtEmd itest4096
+          , bench "16384" $ nf hhtEmd itest16384
+          ]
       , bgroup "iemd"
           [ bench "256"   $ nf iemd itest256
           , bench "1024"  $ nf iemd itest1024
           , bench "4096"  $ nf iemd itest4096
           , bench "16384" $ nf iemd itest16384
+          ]
+      , bgroup "ihhtEmd"
+          [ bench "256"   $ nf ihhtEmd htest256
+          , bench "1024"  $ nf ihhtEmd htest1024
+          , bench "4096"  $ nf ihhtEmd htest4096
+          , bench "16384" $ nf ihhtEmd htest16384
           ]
       ]
 
