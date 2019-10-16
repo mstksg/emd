@@ -62,8 +62,17 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - HUnit
-    - emd
     - containers
+    - emd
+    - ghc-typelits-knownnat
+    - hedgehog
+    - ghc-typelits-natnormalise
+    - typelits-witnesses
+    - statistics
+    - tasty
+    - vector-sized
+    - tasty-hedgehog
+    - tasty-hunit
 
 benchmarks:
   emd-bench:
