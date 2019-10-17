@@ -5,8 +5,8 @@ import           Tests.HHT
 import           Tests.Spline
 
 main :: IO ()
-main = defaultMain $
-            testGroup "Tests" [ splineTest
-                              , emdTests
-                              , hhtTests
-                              ]
+main = defaultMain $ testGroup "Tests"
+    [ splineTest
+    , emdTests
+    , hhtTests
+    ]
