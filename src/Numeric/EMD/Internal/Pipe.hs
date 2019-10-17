@@ -1,88 +1,134 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase    #-}
 
-module Numeric.EMD.Internal.Pipe where
+module Numeric.EMD.Internal.Pipe (
 
--- module Numeric.EMD.Internal.Pipe (
---   ) where
+    Pipe(..)
+  , (.|)
+  , runPipe
+  , yield, await, awaitSurely
+  , unfoldP, unfoldPForever, sourceList, iterateP
+  , mapP
+  , sinkList
+  , interleaveP
+  ) where
 
 import           Control.Monad
 import           Data.Void
 
-data Pipe i o a =
-      PAwait (Maybe i -> Pipe i o a)
-    | PYield o (Pipe i o a)
+-- | Pipe
+--
+-- *  @i@: Input
+-- *  @o@: Output
+-- *  @u@: Upstream result
+-- *  @r@: Result
+--
+-- Some specializations:
+--
+-- *  If @i@ is '()', we have a producer.  If @r@ is 'Void', it will always
+--    produce.
+-- *  If @o@ is 'Void', we have a consumer.
+-- *  If @u@ is 'Void', the pipe will never stop producing.
+--
+data Pipe i o u a =
+      PAwait (i -> Pipe i o u a) (u -> Pipe i o u a)
+    | PYield o (Pipe i o u a)
     | PDone a
   deriving Functor
 
-instance Applicative (Pipe i o) where
+(.|) :: Pipe a b u v -> Pipe b c v r -> Pipe a c u r
+(.|) = \case
+    PAwait f g -> \q -> PAwait (\x -> f x .| q) (\x -> g x .| q)
+    PYield x y -> \case
+      PAwait f _   -> y .| f x
+      PYield x' y' -> PYield x' (y .| y')
+      PDone  r     -> PDone r
+    r@(PDone  r') -> \case
+      PAwait _ g -> r .| g r'
+      PYield x y -> PYield x (r .| y)
+      PDone  s   -> PDone s
+infixr 2 .|
+
+instance Applicative (Pipe i o u) where
     pure = PDone
     (<*>) = \case
-      PAwait f   -> \q -> PAwait   $ \x -> f x <*> q
+      PAwait f g -> \q -> PAwait (\x -> f x <*> q) (\x -> g x <*> q)
       PYield x y -> \q -> PYield x (y <*> q)
       PDone  f   -> fmap f
     (*>) = \case
-      PAwait f   -> \q -> PAwait   $ \x -> f x *> q
+      PAwait f g -> \q -> PAwait (\x -> f x *> q) (\x -> g x *> q)
       PYield x y -> \q -> PYield x (y *> q)
       PDone  _   -> id
 
-instance Monad (Pipe i o) where
+instance Monad (Pipe i o u) where
     return = PDone
     (>>=) = \case
-      PAwait f   -> \q -> PAwait   $ f >=> q
+      PAwait f g -> \q -> PAwait (f >=> q) (g >=> q)
       PYield x y -> \q -> PYield x (y >>= q)
       PDone  x -> ($ x)
     (>>)  = (*>)
 
-runPipe :: Pipe () Void a -> a
+runPipe :: Pipe () Void u a -> a
 runPipe = \case
-    PAwait f   -> runPipe $ f (Just ())
+    PAwait f _ -> runPipe $ f ()
     PYield x _ -> absurd x
     PDone  x   -> x
 
-yield :: o -> Pipe i o ()
+yield :: o -> Pipe i o u ()
 yield x = PYield x (pure ())
 
-await :: Pipe i o (Maybe i)
-await = PAwait PDone
+await :: Pipe i o u (Maybe i)
+await = PAwait (PDone . Just) (\_ -> PDone Nothing)
 
-sourceList :: Foldable t => t a -> Pipe i a ()
+awaitSurely :: Pipe i o Void i
+awaitSurely = PAwait PDone absurd
+
+unfoldP :: (b -> Maybe (a, b)) -> b -> Pipe i a u ()
+unfoldP f = go
+  where
+    go z = case f z of
+      Nothing      -> PDone ()
+      Just (x, z') -> PYield x (go z')
+
+unfoldPForever :: (b -> (a, b)) -> b -> Pipe i a u r
+unfoldPForever f = go
+  where
+    go z = PYield x (go z')
+      where
+        (x, z') = f z
+
+iterateP :: (a -> a) -> a -> Pipe i a u r
+iterateP f = unfoldPForever (join (,) . f)
+
+sourceList :: Foldable t => t a -> Pipe i a u ()
 sourceList = foldr PYield (PDone ())
 
-awaitForever :: (i -> Pipe i o a) -> Pipe i o ()
+awaitForever :: (i -> Pipe i o u a) -> Pipe i o u ()
 awaitForever f = go
   where
-    go = PAwait $ \case
-      Nothing -> PDone ()
-      Just x  -> f x *> go
+    go = PAwait (\x -> f x *> go) (\_ -> PDone ())
 
-mapP :: (a -> b) -> Pipe a b ()
+mapP :: (a -> b) -> Pipe a b u ()
 mapP f = awaitForever (yield . f)
 
-foldrP :: (a -> b -> b) -> b -> Pipe a Void b
+foldrP :: (a -> b -> b) -> b -> Pipe a Void u b
 foldrP f z = go
   where
     go = await >>= \case
       Nothing -> pure z
       Just x  -> f x <$> go
 
-sinkList :: Pipe i Void [i]
+sinkList :: Pipe i Void u [i]
 sinkList = foldrP (:) []
 
-headP :: Pipe i Void (Maybe i)
-headP = await
-
-(.|) :: Pipe a b () -> Pipe b c r -> Pipe a c r
-(.|) = \case
-    PAwait f   -> \q -> PAwait $ \x -> f x .| q
+interleaveP :: Pipe i o u () -> Pipe i o u () -> Pipe i o u ()
+interleaveP p = case p of
+    PAwait f g -> \case
+      PAwait f' g' -> PAwait (interleaveP <$> f <*> f') (interleaveP <$> g <*> g')
+      PYield x' y' -> PYield x' $ interleaveP p y'
+      PDone _      -> p
     PYield x y -> \case
-      PAwait f     -> y .| f (Just x)
-      PYield x' y' -> PYield x' (y .| y')
-      PDone  r     -> PDone r
-    PDone  _   -> \case
-      PAwait f   -> PAwait $ \_ -> PDone () .| f Nothing
-      PYield x y -> PYield x (PDone () .| y)
-      PDone  r   -> PDone r
-infixr 2 .|
-
-
+      q@(PAwait _ _) -> PYield x $ interleaveP y q
+      PYield x' y'   -> PYield x . PYield x' $ interleaveP y y'
+      PDone _        -> p
+    PDone   _  -> id
