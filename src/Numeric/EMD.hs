@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric                            #-}
 {-# LANGUAGE GADTs                                    #-}
 {-# LANGUAGE LambdaCase                               #-}
+{-# LANGUAGE RankNTypes                               #-}
 {-# LANGUAGE RecordWildCards                          #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}
 {-# LANGUAGE TypeApplications                         #-}
@@ -51,16 +52,20 @@ module Numeric.EMD (
   , envelopes
   ) where
 
+import           Control.Applicative
 import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.IO.Class
+import           Control.Monad.Trans.State
 import           Data.Default.Class
 import           Data.Finite
 import           Data.Functor.Identity
 import           Data.List
+import           Data.Void
 import           GHC.Generics                 (Generic)
 import           GHC.TypeNats
 import           Numeric.EMD.Internal.Extrema
+import           Numeric.EMD.Internal.Pipe
 import           Numeric.EMD.Internal.Spline
 import           Text.Printf
 import qualified Data.Binary                  as Bi
@@ -233,6 +238,66 @@ iemd EMD{..} = foldl' (SVG.zipWith (+)) emdResidual emdIMFs
 -- a residual, or a new IMF.
 data SiftResult v n a = SRResidual !(SVG.Vector v n a)
                       | SRIMF      !(SVG.Vector v n a) !Int   -- ^ number of sifting iterations
+
+newtype Sifter v n a = Sifter { runSifter :: forall m. Functor m => Pipe (SVG.Vector v n a) Void Void m () }
+
+siftTimes :: Int -> Sifter v n a
+siftTimes n = Sifter $ dropP n .| pure ()
+
+siftStdDev :: forall v n a. (VG.Vector v a, Fractional a, Ord a) => a -> Sifter v n a
+siftStdDev t = Sifter $ go =<< awaitSurely
+  where
+    go :: Functor m => SVG.Vector v n a -> Pipe (SVG.Vector v n a) Void Void m ()
+    go v = do
+      v' <- awaitSurely
+      let sd = SVG.sum $ SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v'
+      if sd <= t
+        then pure ()
+        else go v'
+    eps = 0.0000001
+
+-- -- hm yeah here is a fundamental problem: which one to keep?
+-- andSift :: Sifter v n a -> Sifter v n a -> Sifter v n a
+-- andSift (Sifter x) (Sifter y) = Sifter (x *> y)
+
+-- orSift :: Sifter v n a -> Sifter v n a -> Sifter v n a
+-- orSift (Sifter x) (Sifter y) = Sifter (x <|> y)
+
+-- -- | 'True' if stop
+-- testCondition
+--     :: (VG.Vector v a, Fractional a, Ord a)
+--     => SiftCondition a
+--     -> Int
+--     -> SVG.Vector v n a
+--     -> SVG.Vector v n a
+--     -> Bool
+-- testCondition tc i v v' = go tc
+--   where
+--     sd = SVG.sum $ SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v'
+--     go = \case
+--       SCStdDev t -> sd <= t
+--       SCTimes l  -> i >= l
+--       SCOr  f g  -> go f || go g
+--       SCAnd f g  -> go f && go g
+--     eps = 0.0000001
+
+
+-- | Iterated sifting process, used to produce either an IMF or a residual.
+siftSifter
+    :: forall v n a. (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+    => EMDOpts a
+    -> Sifter v (n + 1) a
+    -> SVG.Vector v (n + 1) a
+    -> SiftResult v (n + 1) a
+siftSifter EO{..} s v0 = case execStateT (runPipe (repeatM go .| runSifter s)) (1, v0) of
+    Left  v        -> SRResidual v
+    Right (!i, !v) -> SRIMF v i
+  where
+    go :: StateT (Int, SVG.Vector v (n + 1) a) (Either (SVG.Vector v (n + 1) a)) (SVG.Vector v (n + 1) a)
+    go = StateT $ \(!i, !v) ->
+      case sift' eoSplineEnd eoBoundaryHandler v of
+        Nothing  -> Left v
+        Just !v' -> Right (v, (i + 1, v'))
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
 sift

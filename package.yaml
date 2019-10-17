@@ -28,6 +28,7 @@ ghc-options:
 - -Wall
 - -Wredundant-constraints
 - -Wcompat
+- -Werror=incomplete-patterns
 
 
 library:
