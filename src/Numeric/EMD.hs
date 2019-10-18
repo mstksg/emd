@@ -143,23 +143,23 @@ defaultSC :: Fractional a => SiftCondition a
 defaultSC = SCStdDev 0.3 `SCOr` SCTimes 50     -- R package uses SCTimes 20, Matlab uses no limit
 -- defaultSC = SCStdDev 0.3
 
--- | 'True' if stop
-testCondition
-    :: (VG.Vector v a, Fractional a, Ord a)
-    => SiftCondition a
-    -> Int
-    -> SVG.Vector v n a
-    -> SVG.Vector v n a
-    -> Bool
-testCondition tc i v v' = go tc
-  where
-    sd = SVG.sum $ SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v'
-    go = \case
-      SCStdDev t -> sd <= t
-      SCTimes l  -> i >= l
-      SCOr  f g  -> go f || go g
-      SCAnd f g  -> go f && go g
-    eps = 0.0000001
+-- -- | 'True' if stop
+-- testCondition
+--     :: (VG.Vector v a, Fractional a, Ord a)
+--     => SiftCondition a
+--     -> Int
+--     -> SVG.Vector v n a
+--     -> SVG.Vector v n a
+--     -> Bool
+-- testCondition tc i v v' = go tc
+--   where
+--     sd = SVG.sum $ SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v'
+--     go = \case
+--       SCStdDev t -> sd <= t
+--       SCTimes l  -> i >= l
+--       SCOr  f g  -> go f || go g
+--       SCAnd f g  -> go f && go g
+--     eps = 0.0000001
 
 -- | An @'EMD' v n a@ is an Empirical Mode Decomposition of a time series
 -- with @n@ items of type @a@ stored in a vector @v@.
@@ -256,62 +256,49 @@ siftStdDev t = Sifter $ go =<< awaitSurely
         else go v'
     eps = 0.0000001
 
--- -- hm yeah here is a fundamental problem: which one to keep?
--- andSift :: Sifter v n a -> Sifter v n a -> Sifter v n a
--- andSift (Sifter x) (Sifter y) = Sifter (x *> y)
+siftOr :: Sifter v n a -> Sifter v n a -> Sifter v n a
+siftOr (Sifter p) (Sifter q) = Sifter $ getZipSink $ ZipSink p <|> ZipSink q
 
--- orSift :: Sifter v n a -> Sifter v n a -> Sifter v n a
--- orSift (Sifter x) (Sifter y) = Sifter (x <|> y)
+siftAnd :: Sifter v n a -> Sifter v n a -> Sifter v n a
+siftAnd (Sifter p) (Sifter q) = Sifter $ getZipSink $ ZipSink p *> ZipSink q
 
--- -- | 'True' if stop
--- testCondition
---     :: (VG.Vector v a, Fractional a, Ord a)
---     => SiftCondition a
---     -> Int
---     -> SVG.Vector v n a
---     -> SVG.Vector v n a
---     -> Bool
--- testCondition tc i v v' = go tc
---   where
---     sd = SVG.sum $ SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v'
---     go = \case
---       SCStdDev t -> sd <= t
---       SCTimes l  -> i >= l
---       SCOr  f g  -> go f || go g
---       SCAnd f g  -> go f && go g
---     eps = 0.0000001
-
+toSifter :: (VG.Vector v a, Fractional a, Ord a) => SiftCondition a -> Sifter v n a
+toSifter = \case
+    SCStdDev x -> siftStdDev x
+    SCTimes  i -> siftTimes i
+    SCOr p q   -> siftOr (toSifter p) (toSifter q)
+    SCAnd p q  -> siftAnd (toSifter p) (toSifter q)
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
-siftSifter
+sift
     :: forall v n a. (VG.Vector v a, KnownNat n, Fractional a, Ord a)
     => EMDOpts a
-    -> Sifter v (n + 1) a
     -> SVG.Vector v (n + 1) a
     -> SiftResult v (n + 1) a
-siftSifter EO{..} s v0 = case execStateT (runPipe (repeatM go .| runSifter s)) (1, v0) of
+sift EO{..} v0 = case execStateT (runPipe sifterPipe) (0, v0) of
     Left  v        -> SRResidual v
     Right (!i, !v) -> SRIMF v i
   where
-    go :: StateT (Int, SVG.Vector v (n + 1) a) (Either (SVG.Vector v (n + 1) a)) (SVG.Vector v (n + 1) a)
+    sifterPipe = repeatM go
+              .| runSifter (toSifter eoSiftCondition)
     go = StateT $ \(!i, !v) ->
       case sift' eoSplineEnd eoBoundaryHandler v of
         Nothing  -> Left v
         Just !v' -> Right (v, (i + 1, v'))
 
--- | Iterated sifting process, used to produce either an IMF or a residual.
-sift
-    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
-    => EMDOpts a
-    -> SVG.Vector v (n + 1) a
-    -> SiftResult v (n + 1) a
-sift EO{..} = go 1
-  where
-    go !i !v = case sift' eoSplineEnd eoBoundaryHandler v of
-      Nothing -> SRResidual v
-      Just !v'
-        | testCondition eoSiftCondition i v v' -> SRIMF v' i
-        | otherwise                            -> go (i + 1) v'
+-- -- | Iterated sifting process, used to produce either an IMF or a residual.
+-- sift
+--     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+--     => EMDOpts a
+--     -> SVG.Vector v (n + 1) a
+--     -> SiftResult v (n + 1) a
+-- sift EO{..} = go 1
+--   where
+--     go !i !v = case sift' eoSplineEnd eoBoundaryHandler v of
+--       Nothing -> SRResidual v
+--       Just !v'
+--         | testCondition eoSiftCondition i v v' -> SRIMF v' i
+--         | otherwise                            -> go (i + 1) v'
 
 -- | Single sift
 sift'

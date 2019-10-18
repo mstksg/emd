@@ -11,6 +11,7 @@ module Numeric.EMD.Internal.Pipe (
   -- , unfoldP, unfoldPForever, sourceList, iterateP
   , mapP
   , dropP
+  , ZipSink(..)
   -- , sinkList
   -- , interleaveP
   ) where
@@ -35,6 +36,7 @@ import           Control.Monad.Trans.Class
 -- *  If @o@ is 'Void', we have a consumer.
 -- *  If @u@ is 'Void', the pipe will never stop producing.
 --
+-- TODO: CPS this maybe
 data Pipe i o u m a =
       PAwait (i -> Pipe i o u m a) (u -> Pipe i o u m a)
     | PYield o (Pipe i o u m a)
@@ -70,20 +72,6 @@ instance Functor m => Applicative (Pipe i o u m) where
       PYield x y -> \q -> PYield x (y *> q)
       PAct   x   -> \q -> PAct ((*> q) <$> x)
       PDone  _   -> id
-
--- -- hmm..... does this make sense as an alternative lol
--- instance Alternative (Pipe i o u) where
---     empty = PAwait (const empty) (const empty)
---     p <|> q = case p of
---       PAwait f g -> case q of
---         PAwait f' g' -> PAwait ((<|>) <$> f <*> f') ((<|>) <$> g <*> g')
---         PYield x' y' -> PYield x' (p <|> y')
---         PDone  _     -> q
---       PYield x y -> case q of
---         PAwait _  _  -> PYield x (y <|> q)
---         PYield x' y' -> PYield x . PYield x' $ y <|> y'
---         PDone  _     -> q
---       PDone _    -> p
 
 instance Functor m => Monad (Pipe i o u m) where
     return = PDone
@@ -177,3 +165,76 @@ dropP n = do
 --       PYield x' y'   -> PYield x . PYield x' $ interleaveP y y'
 --       PDone _        -> p
 --     PDone   _  -> id
+
+newtype ZipSink i u m a = ZipSink { getZipSink :: Pipe i Void u m a }
+  deriving Functor
+
+zipSink
+    :: Functor m
+    => Pipe i Void u m (a -> b)
+    -> Pipe i Void u m a
+    -> Pipe i Void u m b
+zipSink p q = case p of
+    PAwait f g -> case q of
+      PAwait f' g' -> PAwait (zipSink <$> f <*> f') (zipSink <$> g <*> g')
+      PYield x' _  -> absurd x'
+      PAct   x'    -> PAct (zipSink p <$> x')
+      PDone  _     -> PAwait ((`zipSink` q) . f) ((`zipSink` q) . g)
+    PYield x _ -> absurd x
+    PAct   x   -> PAct ((`zipSink` q) <$> x)
+    PDone  x   -> case q of
+      PAwait f' g' -> PAwait (zipSink p . f') (zipSink p . g')
+      PYield x' _  -> absurd x'
+      PAct   x'    -> PAct (zipSink p <$> x')
+      PDone  x'    -> PDone (x x')
+
+altSink
+    :: Functor m
+    => Pipe i Void u m a
+    -> Pipe i Void u m a
+    -> Pipe i Void u m a
+altSink p q = case p of
+    PAwait f g -> case q of
+      PAwait f' g' -> PAwait (altSink <$> f <*> f') (altSink <$> g <*> g')
+      PYield x' _  -> absurd x'
+      PAct   x'    -> PAct (altSink p <$> x')
+      PDone  x'    -> PDone x'
+    PYield x _ -> absurd x
+    PAct   x   -> case q of
+      PDone  x'   -> PDone x'
+      _           -> PAct ((`altSink` q) <$> x)
+    PDone  x   -> PDone x
+
+-- | '<*>' = distribute input to all, and return result when they finish
+--
+-- 'pure' = immediately finish
+instance Functor m => Applicative (ZipSink i u m) where
+    pure = ZipSink . pure
+    ZipSink p <*> ZipSink q = ZipSink $ zipSink p q
+
+-- | '<|>' = distribute input to all, and return the first result that
+-- finishes
+--
+-- 'empty' = never finish
+instance Functor m => Alternative (ZipSink i u m) where
+    empty = ZipSink go
+      where
+        go = PAwait (const go) (const go)
+    ZipSink p <|> ZipSink q = ZipSink $ altSink p q
+
+
+
+-- -- hmm..... does this make sense as an alternative lol
+-- instance Alternative (Pipe i o u) where
+--     empty = PAwait (const empty) (const empty)
+--     p <|> q = case p of
+--       PAwait f g -> case q of
+--         PAwait f' g' -> PAwait ((<|>) <$> f <*> f') ((<|>) <$> g <*> g')
+--         PYield x' y' -> PYield x' (p <|> y')
+--         PDone  _     -> q
+--       PYield x y -> case q of
+--         PAwait _  _  -> PYield x (y <|> q)
+--         PYield x' y' -> PYield x . PYield x' $ y <|> y'
+--         PDone  _     -> q
+--       PDone _    -> p
+
