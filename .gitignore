@@ -6,3 +6,4 @@ emd.cabal
 .ghc.environment.*
 /dist-newstyle
 *.dump-hi
+.notes.txt

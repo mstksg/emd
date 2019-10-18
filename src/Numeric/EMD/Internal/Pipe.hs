@@ -10,6 +10,7 @@ module Numeric.EMD.Internal.Pipe (
   , repeatM
   -- , unfoldP, unfoldPForever, sourceList, iterateP
   , mapP
+  , mapMP
   , dropP
   , ZipSink(..)
   -- , sinkList
@@ -136,8 +137,11 @@ awaitForever f = go
   where
     go = PAwait (\x -> f x *> go) PDone
 
-mapP :: Functor m => (a -> b) -> Pipe a b u m ()
-mapP f = void $ awaitForever (yield . f)
+mapP :: Functor m => (a -> b) -> Pipe a b u m u
+mapP f = awaitForever (yield . f)
+
+mapMP :: Monad m => (a -> m b) -> Pipe a b u m u
+mapMP f = awaitForever ((yield =<<) . lift . f)
 
 dropP :: Functor m => Int -> Pipe i i u m u
 dropP n = do
