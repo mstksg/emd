@@ -172,7 +172,7 @@ SENatural :: SplineEnd a
 SEClamped :: a -> a -> SplineEnd a
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
-sift :: (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (n + 1) a -> SiftResult v (n + 1) a
+sift :: forall v n a. (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (n + 1) a -> SiftResult v (n + 1) a
 
 -- | The result of a sifting operation. Each sift either yields a residual,
 --   or a new IMF.
