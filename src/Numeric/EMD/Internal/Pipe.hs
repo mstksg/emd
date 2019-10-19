@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE PartialTypeSignatures      #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
@@ -36,6 +37,7 @@ import           Control.Monad.Trans.Free        (FreeT(..), FreeF(..))
 import           Control.Monad.Trans.Free.Church
 import           Control.Monad.Trans.Reader
 import           Data.Functor
+import           Data.List
 import           Data.Void
 import qualified Control.Monad.Trans.Free        as FM
 
@@ -62,19 +64,46 @@ awaitSurely :: Pipe i o Void m i
 awaitSurely = either id absurd <$> awaitEither
 
 runPipe :: forall u m a. Monad m => Pipe () Void u m a -> m a
-runPipe = iterT go . pipeFree
-  where
-    go :: PipeF () Void u (m a) -> m a
-    go = \case
-      PAwaitF f _ -> f ()
-      PYieldF o _ -> absurd o
+runPipe (Pipe p) = runFT p pure $ \pNext -> \case
+    PAwaitF f _ -> pNext (f ())
+    PYieldF o _ -> absurd o
+-- runPipe = iterT go . pipeFree
+--   where
+--     go :: PipeF () Void u (m a) -> m a
+--     go = \case
+--       PAwaitF f _ -> f ()
+--       PYieldF o _ -> absurd o
 
 -- (.|) :: forall a b c u m v r. Functor m => Pipe a b u m v -> Pipe b c v m r -> Pipe a c u m r
--- Pipe p .| Pipe q = Pipe $ FT go
+-- Pipe (FT p) .| Pipe (FT q) = Pipe $ FT $ \fDone fFree ->
+--       q fDone $ \qNext -> \case
+--         PAwaitF f g -> p (qNext . g) $ \pNext -> \case
+--           -- PYieldF x' y' -> _ (pNext y') (qNext (f x'))
+--           -- PYieldF x' y' -> fFree qNext _
+--           -- PYieldF x' y' -> _
+--           -- fFree qNext $ PYieldF x' y'
+--           -- pNext $ qNext (f x')
+          
+    -- _ fDone fNext
 
--- compPipe :: forall a b c u v t m r. (Monad (t m), MonadTrans t, Monad m) => FreeT (PipeF a b u) m v -> FreeT (PipeF b c v) m r -> t m r
--- -- FreeT (PipeF a c u) m r
--- compPipe p q = lift (runFreeT p) >>= \case
+(.|) :: forall a b c u m v r. Monad m => Pipe a b u m v -> Pipe b c v m r -> Pipe a c u m r
+Pipe p .| Pipe q = Pipe $ toFT $ compPipe (fromFT p) (fromFT q)
+
+compPipe
+    :: forall a b c u v m r. (Monad m)
+    => FreeT (PipeF a b u) m v
+    -> FreeT (PipeF b c v) m r
+    -> FreeT (PipeF a c u) m r
+compPipe p q = FreeT $ runFreeT q >>= \case
+    Pure x             -> pure . Pure $ x
+    Free (PAwaitF f g) -> runFreeT p >>= \case
+      Pure x'              -> runFreeT $ compPipe p  (g x')
+      Free (PAwaitF f' g') -> pure . Free $ PAwaitF (\x -> compPipe (f' x) q)
+                                                    (\x -> compPipe (g' x) q)
+      Free (PYieldF x' y') -> runFreeT $ compPipe y' (f x')
+    Free (PYieldF x y) -> pure . Free $ PYieldF x (compPipe p y)
+  
+    -- lift (runFreeT p) >>= \case
 --     Pure x -> lift (runFreeT q) >>= \case
 --       Pure x' -> pure x'
 --       Free (PAwaitF f' g') -> _ $ g' x'
@@ -173,7 +202,7 @@ runPipe = iterT go . pipeFree
 --       PYield x y -> PYield x (r .| y)
 --       PAct   x'  -> PAct ((r .|) <$> x')
 --       PDone  s   -> PDone s
--- infixr 2 .|
+infixr 2 .|
 
 
 ---- | Pipe
@@ -259,28 +288,25 @@ runPipe = iterT go . pipeFree
 --awaitSurely :: Pipe i o Void m i
 --awaitSurely = PAwait PDone absurd
 
----- unfoldP :: (b -> Maybe (a, b)) -> b -> Pipe i a u ()
----- unfoldP f = go
-----   where
-----     go z = case f z of
-----       Nothing      -> PDone ()
-----       Just (x, z') -> PYield x (go z')
+unfoldP :: (b -> Maybe (a, b)) -> b -> Pipe i a u m ()
+unfoldP f = go
+  where
+    go z = case f z of
+      Nothing      -> pure ()
+      Just (x, z') -> yield x *> go z'
 
---unfoldPForever :: (b -> (a, b)) -> b -> Pipe i a u m r
---unfoldPForever f = go
---  where
---    go z = PYield x (go z')
---      where
---        (x, z') = f z
+unfoldPForever :: (b -> (a, b)) -> b -> Pipe i a u m r
+unfoldPForever f = go
+  where
+    go z = yield x *> go z'
+      where
+        (x, z') = f z
 
----- iterateP :: (a -> a) -> a -> Pipe i a u r
----- iterateP f = unfoldPForever (join (,) . f)
+iterateP :: (a -> a) -> a -> Pipe i a u m r
+iterateP f = unfoldPForever (join (,) . f)
 
---iterateP :: (a -> a) -> a -> Pipe i a u m r
---iterateP f = unfoldPForever (join (,) . f)
-
--- sourceList :: Foldable t => t a -> Pipe i a u m ()
--- sourceList = foldr PYield (PDone ())
+sourceList :: [a] -> Pipe i a u m ()
+sourceList = unfoldP uncons
 
 repeatM :: Monad m => m o -> Pipe i o u m u
 repeatM x = go
@@ -311,18 +337,18 @@ mapP f = awaitForever (yield . f)
 mapMP :: Monad m => (a -> m b) -> Pipe a b u m u
 mapMP f = awaitForever ((yield =<<) . lift . f)
 
-dropP :: Int -> Pipe i i u m ()
+dropP :: Int -> Pipe i o u m ()
 dropP n = replicateM_ n await
 
----- foldrP :: (a -> b -> b) -> b -> Pipe a Void u b
----- foldrP f z = go
-----   where
-----     go = await >>= \case
-----       Nothing -> pure z
-----       Just x  -> f x <$> go
+foldrP :: (a -> b -> b) -> b -> Pipe a Void u m b
+foldrP f z = go
+  where
+    go = await >>= \case
+      Nothing -> pure z
+      Just x  -> f x <$> go
 
----- sinkList :: Pipe i Void u [i]
----- sinkList = foldrP (:) []
+sinkList :: Pipe i Void u m [i]
+sinkList = foldrP (:) []
 
 ---- interleaveP :: Pipe i o u () -> Pipe i o u () -> Pipe i o u ()
 ---- interleaveP p = case p of
