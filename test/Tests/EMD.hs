@@ -44,7 +44,7 @@ orthogProp eo = property $ withSize (Range.linear 8 10) $ \(_ :: Proxy n) -> do
           , (j, y) <- zip indices imfs
           , i < j
           ]
-        badOrthos = filter (\(_,_,d) -> abs d > 0.25) orthoMatrix
+        badOrthos = filter (\(_,_,d) -> abs d > 0.5) orthoMatrix
         fracBad :: Double
         fracBad = fromIntegral (length badOrthos)
                 / fromIntegral (length orthoMatrix)
