@@ -8,7 +8,6 @@
 {-# LANGUAGE TypeApplications                         #-}
 {-# LANGUAGE TypeInType                               #-}
 {-# LANGUAGE TypeOperators                            #-}
-{-# OPTIONS_GHC -Wno-redundant-constraints            #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
@@ -221,15 +220,14 @@ iemd EMD{..} = foldl' (SVG.zipWith (+)) emdResidual emdIMFs
 data SiftResult v n a = SRResidual !(SVG.Vector v n a)
                       | SRIMF      !(SVG.Vector v n a) !Int   -- ^ number of sifting iterations
 
-type Sifter v n a = forall m. Monad m => Pipe (SVG.Vector v n a) Void Void m ()
+type Sifter v n m a = Pipe (SVG.Vector v n a) Void Void m ()
 
-siftTimes :: Int -> Sifter v n a
+siftTimes :: Int -> Sifter v n m a
 siftTimes n = dropP (n - 1) >> void awaitSurely
 
-siftStdDev :: forall v n a. (VG.Vector v a, Fractional a, Ord a) => a -> Sifter v n a
+siftStdDev :: forall v n m a. (VG.Vector v a, Fractional a, Ord a) => a -> Sifter v n m a
 siftStdDev t = go =<< awaitSurely
   where
-    go :: Functor m => SVG.Vector v n a -> Pipe (SVG.Vector v n a) Void Void m ()
     go v = do
       v' <- awaitSurely
       let sd = SVG.sum $ SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v'
@@ -238,13 +236,13 @@ siftStdDev t = go =<< awaitSurely
         else go v'
     eps = 0.0000001
 
-siftOr :: Sifter v n a -> Sifter v n a -> Sifter v n a
+siftOr :: Monad m => Sifter v n m a -> Sifter v n m a -> Sifter v n m a
 siftOr p q = getZipSink $ ZipSink p <|> ZipSink q
 
-siftAnd :: Sifter v n a -> Sifter v n a -> Sifter v n a
+siftAnd :: Monad m => Sifter v n m a -> Sifter v n m a -> Sifter v n m a
 siftAnd p q = getZipSink $ ZipSink p *> ZipSink q
 
-toSifter :: (VG.Vector v a, Fractional a, Ord a) => SiftCondition a -> Sifter v n a
+toSifter :: (VG.Vector v a, Monad m, Fractional a, Ord a) => SiftCondition a -> Sifter v n m a
 toSifter = \case
     SCStdDev x -> siftStdDev x
     SCTimes  i -> siftTimes i
