@@ -8,10 +8,13 @@ module Numeric.EMD.Internal.Pipe (
   , runPipe
   , yield, await, awaitSurely, awaitForever
   , repeatM
+  , sourceList
   -- , unfoldP, unfoldPForever, sourceList, iterateP
   , mapP
   , mapMP
   , dropP
+  , takeP
+  , sinkList
   , ZipSink(..)
   -- , sinkList
   -- , interleaveP
@@ -46,19 +49,15 @@ data Pipe i o u m a =
   deriving Functor
 
 (.|) :: Functor m => Pipe a b u m v -> Pipe b c v m r -> Pipe a c u m r
-(.|) = \case
-    PAwait f g -> \q -> PAwait (\x -> f x .| q) (\x -> g x .| q)
-    p@(PYield x y) -> \case
-      PAwait f _   -> y .| f x
-      PYield x' y' -> PYield x' (p .| y')
-      PAct   x'    -> PAct ((p .|) <$> x')
-      PDone  r     -> PDone r
-    PAct   x   -> \q -> PAct ((.| q) <$> x)
-    r@(PDone  r') -> \case
-      PAwait _ g -> r .| g r'
-      PYield x y -> PYield x (r .| y)
-      PAct   x'  -> PAct ((r .|) <$> x')
-      PDone  s   -> PDone s
+p .| q = case q of
+    PAwait f g -> case p of
+      PAwait f' g' -> PAwait (\x -> f' x .| q) (\x -> g' x .| q)
+      PYield x' y' -> y' .| f x'
+      PAct   x'    -> PAct $ (.| q) <$> x'
+      PDone  x'    -> p .| g x'
+    PYield x y -> PYield x (p .| y)
+    PAct   x   -> PAct $ (p .|) <$> x
+    PDone  x   -> PDone x
 infixr 2 .|
 
 instance Functor m => Applicative (Pipe i o u m) where
@@ -99,6 +98,9 @@ runPipe = \case
 yield :: o -> Pipe i o u m ()
 yield x = PYield x (PDone ())
 
+awaitEither :: Pipe i o u m (Either i u)
+awaitEither = PAwait (PDone . Left) (PDone . Right)
+
 await :: Pipe i o u m (Maybe i)
 await = PAwait (PDone . Just) (\_ -> PDone Nothing)
 
@@ -122,8 +124,8 @@ awaitSurely = PAwait PDone absurd
 -- iterateP :: (a -> a) -> a -> Pipe i a u r
 -- iterateP f = unfoldPForever (join (,) . f)
 
--- sourceList :: Foldable t => t a -> Pipe i a u ()
--- sourceList = foldr PYield (PDone ())
+sourceList :: Foldable t => t a -> Pipe i a u m ()
+sourceList = foldr PYield (PDone ())
 
 repeatM :: Functor m => m o -> Pipe i o u m u
 repeatM x = go
@@ -143,20 +145,22 @@ mapP f = awaitForever (yield . f)
 mapMP :: Monad m => (a -> m b) -> Pipe a b u m u
 mapMP f = awaitForever ((yield =<<) . lift . f)
 
-dropP :: Functor m => Int -> Pipe i i u m u
-dropP n = do
-    replicateM_ n await
-    awaitForever yield
+dropP :: Functor m => Int -> Pipe i o u m ()
+dropP n = replicateM_ n await
+    -- awaitForever yield
 
--- foldrP :: (a -> b -> b) -> b -> Pipe a Void u b
--- foldrP f z = go
---   where
---     go = await >>= \case
---       Nothing -> pure z
---       Just x  -> f x <$> go
+takeP :: Functor m => Int -> Pipe i i u m ()
+takeP n = replicateM_ n $ mapM_ yield =<< await
 
--- sinkList :: Pipe i Void u [i]
--- sinkList = foldrP (:) []
+foldrP :: Functor m =>(a -> b -> b) -> b -> Pipe a Void u m b
+foldrP f z = go
+  where
+    go = await >>= \case
+      Nothing -> pure z
+      Just x  -> f x <$> go
+
+sinkList :: Functor m => Pipe i Void u m [i]
+sinkList = foldrP (:) []
 
 -- interleaveP :: Pipe i o u () -> Pipe i o u () -> Pipe i o u ()
 -- interleaveP p = case p of
