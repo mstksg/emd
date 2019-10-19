@@ -3,21 +3,24 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Numeric.EMD.Internal.Pipe (
-    Pipe(..)
+    Pipe
   , (.|)
   , runPipe
-  , yield, await, awaitSurely, awaitForever
+  , awaitSurely
   , repeatM
-  , sourceList
-  -- , unfoldP, unfoldPForever, sourceList, iterateP
-  , mapP
-  , mapMP
   , dropP
-  , takeP
-  , sinkList
   , ZipSink(..)
   -- , sinkList
   -- , interleaveP
+  -- , yield
+  -- , await
+  -- , awaitForever
+  -- , sourceList
+  -- , unfoldP, unfoldPForever, sourceList, iterateP
+  -- , mapP
+  -- , mapMP
+  -- , takeP
+  -- , sinkList
   ) where
 
 import           Control.Applicative
@@ -229,20 +232,3 @@ instance Functor m => Alternative (ZipSink i u m) where
       where
         go = PAwait (const go) (const go)
     ZipSink p <|> ZipSink q = ZipSink $ altSink p q
-
-
-
--- -- hmm..... does this make sense as an alternative lol
--- instance Alternative (Pipe i o u) where
---     empty = PAwait (const empty) (const empty)
---     p <|> q = case p of
---       PAwait f g -> case q of
---         PAwait f' g' -> PAwait ((<|>) <$> f <*> f') ((<|>) <$> g <*> g')
---         PYield x' y' -> PYield x' (p <|> y')
---         PDone  _     -> q
---       PYield x y -> case q of
---         PAwait _  _  -> PYield x (y <|> q)
---         PYield x' y' -> PYield x . PYield x' $ y <|> y'
---         PDone  _     -> q
---       PDone _    -> p
-
