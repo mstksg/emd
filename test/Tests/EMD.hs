@@ -10,6 +10,7 @@ module Tests.EMD (
     emdTests
   ) where
 
+import           Control.Monad
 import           Data.Functor.Identity
 import           Data.Proxy
 import           GHC.TypeNats
@@ -17,6 +18,7 @@ import           Hedgehog
 import           Numeric.EMD
 import           Test.Tasty
 import           Tests.Util
+import qualified Hedgehog.Range        as Range
 
 emdTests :: TestTree
 emdTests = groupTree $$(discover)
@@ -24,7 +26,33 @@ emdTests = groupTree $$(discover)
 prop_iemd_default :: Property
 prop_iemd_default = iemdProp defaultEO
 
+prop_orthog_default :: Property
+prop_orthog_default = orthogProp defaultEO
+
 iemdProp :: EMDOpts Double -> Property
-iemdProp eo = property $ withSize $ \(_ :: Proxy n) -> do
+iemdProp eo = property $ withSize (Range.linear 1 8) $ \(_ :: Proxy n) -> do
     xs <- forAll $ generateData @n
     tripping (CE xs) (emd @_ @_ @(2^n-1) eo . getCE) (Identity . CE . iemd)
+
+orthogProp :: EMDOpts Double -> Property
+orthogProp eo = property $ withSize (Range.linear 8 10) $ \(_ :: Proxy n) -> do
+    xs   <- forAll $ generateData @n
+    let imfs = emdIMFs (emd @_ @_ @(2^n-1) eo xs)
+        orthoMatrix =
+          [ ((i, j), (x, y), dot x y / sqrt (dot x x * dot y y))
+          | (i, x) <- zip indices imfs
+          , (j, y) <- zip indices imfs
+          , i < j
+          ]
+        badOrthos = filter (\(_,_,d) -> abs d > 0.25) orthoMatrix
+        fracBad :: Double
+        fracBad = fromIntegral (length badOrthos)
+                / fromIntegral (length orthoMatrix)
+    annotateShow orthoMatrix
+    annotateShow fracBad
+    when (length orthoMatrix < 6) discard
+    assert $ fracBad <= 0.25
+  where
+    indices :: [Int]
+    indices = [1..]
+    -- tripping (CE xs) (emd @_ @_ @(2^n-1) eo . getCE) (Identity . CE . iemd)

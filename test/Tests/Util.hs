@@ -13,6 +13,7 @@ module Tests.Util (
   , CloseEnough(..)
   , generateData
   , withSize
+  , dot
   ) where
 
 import           Data.Complex
@@ -22,6 +23,7 @@ import           GHC.TypeLits.Compare
 import           GHC.TypeNats
 import           Hedgehog
 import           Hedgehog.Internal.Property
+import           Numeric.Natural
 import           Statistics.Transform
 import           Test.Tasty
 import           Test.Tasty.Hedgehog
@@ -46,14 +48,17 @@ instance KnownNat n => Eq (CloseEnough n) where
     CE x == CE y = ((d `dot` d) / sqrt ((x `dot` x) * (y `dot` y))) < 0.0001
       where
         d = V.zipWith (-) x y
-        dot a b = sum $ V.zipWith (*) a b
+
+dot :: Num a => V.Vector n a -> V.Vector n a -> a
+dot a b = sum $ V.zipWith (*) a b
 
 withSize
     :: Monad m
-    => (forall n. (KnownNat n, 1 <= 2^n) => Proxy n -> PropertyT m a)
+    => Range Natural
+    -> (forall n. (KnownNat n, 1 <= 2^n) => Proxy n -> PropertyT m a)
     -> PropertyT m a
-withSize f = do
-    n <- forAll $ Gen.integral (Range.linear 1 5)
+withSize r f = do
+    n <- forAll $ Gen.integral r
     case someNatVal n of
       SomeNat (p :: Proxy n) -> do
         LE Refl <- pure $ Proxy @1 %<=? Proxy @(2^n)
