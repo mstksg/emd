@@ -46,6 +46,7 @@ library:
   - deepseq
   - fft
   - finite-typelits
+  - free
   - ghc-typelits-knownnat
   - ghc-typelits-natnormalise
   - transformers
