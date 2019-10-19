@@ -34,6 +34,30 @@ data PipeF i o u a =
 
 makeFree ''PipeF
 
+-- | Similar to Conduit
+--
+-- *  @i@: Type of input stream
+-- *  @o@: Type of output stream
+-- *  @u@: Type of the /result/ of the upstream pipe (Outputted when
+--    upstream pipe finishes)
+-- *  @m@: Underlying monad
+-- *  @a@: Result type (Outputted when finished)
+--
+-- Some specializations:
+--
+-- *  A pipe is a /producer/ if @i@ is '()': it doesn't need anything to go
+--    pump out items.
+--
+--    If a pipe is producer and @a@ is 'Void', it means that it will
+--    produce infinitely.
+--
+-- *  A pipe is a /consumer/ if @o@ is 'Void': it will never yield anything
+--    else downstream.
+--
+-- *  Normally you can ask for input upstream with 'await', which returns
+--    'Nothing' if the pipe upstream stops producing.  However, if @u@ is
+--    'Void', it means that the pipe upstream will never stop, so you can
+--    use 'awaitSurely' to get a guaranteed answer.
 newtype Pipe i o u m a = Pipe { pipeFree :: FT (PipeF i o u) m a }
   deriving (Functor, Applicative, Monad, MonadTrans, MonadFree (PipeF i o u))
 
@@ -99,9 +123,7 @@ sourceList = traverse_ yield
 repeatM :: Monad m => m o -> Pipe i o u m u
 repeatM x = go
   where
-    go = do
-      yield =<< lift x
-      go
+    go = (yield =<< lift x) *> go
 
 awaitForever :: (i -> Pipe i o u m a) -> Pipe i o u m u
 awaitForever f = go
@@ -109,6 +131,11 @@ awaitForever f = go
     go = awaitEither >>= \case
       Left x  -> f x *> go
       Right x -> pure x
+
+-- finishPipe
+--     :: u
+--     -> Pipe i o u    m a
+--     -> Pipe i o Void m a
 
 mapP :: (a -> b) -> Pipe a b u m u
 mapP f = awaitForever (yield . f)
