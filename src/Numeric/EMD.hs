@@ -142,6 +142,7 @@ instance Fractional a => Default (SiftCondition a) where
 defaultSC :: Fractional a => SiftCondition a
 defaultSC = SCStdDev 0.3 `SCOr` SCTimes 50     -- R package uses SCTimes 20, Matlab uses no limit
 -- defaultSC = SCStdDev 0.3
+-- defaultSC = SCTimes 50
 
 -- -- | 'True' if stop
 -- testCondition
@@ -239,13 +240,13 @@ iemd EMD{..} = foldl' (SVG.zipWith (+)) emdResidual emdIMFs
 data SiftResult v n a = SRResidual !(SVG.Vector v n a)
                       | SRIMF      !(SVG.Vector v n a) !Int   -- ^ number of sifting iterations
 
-newtype Sifter v n a = Sifter { runSifter :: forall m. Functor m => Pipe (SVG.Vector v n a) Void Void m () }
+type Sifter v n a = forall m. Functor m => Pipe (SVG.Vector v n a) Void Void m ()
 
 siftTimes :: Int -> Sifter v n a
-siftTimes n = Sifter $ dropP n .| pure ()
+siftTimes n = dropP (n - 1) >> void awaitSurely
 
 siftStdDev :: forall v n a. (VG.Vector v a, Fractional a, Ord a) => a -> Sifter v n a
-siftStdDev t = Sifter $ go =<< awaitSurely
+siftStdDev t = go =<< awaitSurely
   where
     go :: Functor m => SVG.Vector v n a -> Pipe (SVG.Vector v n a) Void Void m ()
     go v = do
@@ -257,10 +258,10 @@ siftStdDev t = Sifter $ go =<< awaitSurely
     eps = 0.0000001
 
 siftOr :: Sifter v n a -> Sifter v n a -> Sifter v n a
-siftOr (Sifter p) (Sifter q) = Sifter $ getZipSink $ ZipSink p <|> ZipSink q
+siftOr p q = getZipSink $ ZipSink p <|> ZipSink q
 
 siftAnd :: Sifter v n a -> Sifter v n a -> Sifter v n a
-siftAnd (Sifter p) (Sifter q) = Sifter $ getZipSink $ ZipSink p *> ZipSink q
+siftAnd p q = getZipSink $ ZipSink p *> ZipSink q
 
 toSifter :: (VG.Vector v a, Fractional a, Ord a) => SiftCondition a -> Sifter v n a
 toSifter = \case
@@ -280,11 +281,11 @@ sift EO{..} v0 = case execStateT (runPipe sifterPipe) (0, v0) of
     Right (!i, !v) -> SRIMF v i
   where
     sifterPipe = repeatM go
-              .| runSifter (toSifter eoSiftCondition)
+              .| toSifter eoSiftCondition
     go = StateT $ \(!i, !v) ->
       case sift' eoSplineEnd eoBoundaryHandler v of
         Nothing  -> Left v
-        Just !v' -> Right (v, (i + 1, v'))
+        Just !v' -> Right (v', (i + 1, v'))
 
 -- -- | Iterated sifting process, used to produce either an IMF or a residual.
 -- sift
