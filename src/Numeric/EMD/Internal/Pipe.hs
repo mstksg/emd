@@ -36,6 +36,7 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Free        (FreeT(..), FreeF(..))
 import           Control.Monad.Trans.Free.Church
 import           Control.Monad.Trans.Reader
+import           Data.Foldable
 import           Data.Functor
 import           Data.List
 import           Data.Void
@@ -64,229 +65,31 @@ awaitSurely :: Pipe i o Void m i
 awaitSurely = either id absurd <$> awaitEither
 
 runPipe :: forall u m a. Monad m => Pipe () Void u m a -> m a
-runPipe (Pipe p) = runFT p pure $ \pNext -> \case
-    PAwaitF f _ -> pNext (f ())
-    PYieldF o _ -> absurd o
--- runPipe = iterT go . pipeFree
---   where
---     go :: PipeF () Void u (m a) -> m a
---     go = \case
---       PAwaitF f _ -> f ()
---       PYieldF o _ -> absurd o
+runPipe = iterT go . pipeFree
+  where
+    go :: PipeF () Void u (m a) -> m a
+    go = \case
+      PAwaitF f _ -> f ()
+      PYieldF o _ -> absurd o
 
--- (.|) :: forall a b c u m v r. Functor m => Pipe a b u m v -> Pipe b c v m r -> Pipe a c u m r
--- Pipe (FT p) .| Pipe (FT q) = Pipe $ FT $ \fDone fFree ->
---       q fDone $ \qNext -> \case
---         PAwaitF f g -> p (qNext . g) $ \pNext -> \case
---           -- PYieldF x' y' -> _ (pNext y') (qNext (f x'))
---           -- PYieldF x' y' -> fFree qNext _
---           -- PYieldF x' y' -> _
---           -- fFree qNext $ PYieldF x' y'
---           -- pNext $ qNext (f x')
-          
-    -- _ fDone fNext
-
+-- can this be done without going through FreeT?
 (.|) :: forall a b c u m v r. Monad m => Pipe a b u m v -> Pipe b c v m r -> Pipe a c u m r
-Pipe p .| Pipe q = Pipe $ toFT $ compPipe (fromFT p) (fromFT q)
+Pipe p .| Pipe q = Pipe $ toFT $ compPipe_ (fromFT p) (fromFT q)
 
-compPipe
+compPipe_
     :: forall a b c u v m r. (Monad m)
     => FreeT (PipeF a b u) m v
     -> FreeT (PipeF b c v) m r
     -> FreeT (PipeF a c u) m r
-compPipe p q = FreeT $ runFreeT q >>= \case
+compPipe_ p q = FreeT $ runFreeT q >>= \case
     Pure x             -> pure . Pure $ x
     Free (PAwaitF f g) -> runFreeT p >>= \case
-      Pure x'              -> runFreeT $ compPipe p  (g x')
-      Free (PAwaitF f' g') -> pure . Free $ PAwaitF (\x -> compPipe (f' x) q)
-                                                    (\x -> compPipe (g' x) q)
-      Free (PYieldF x' y') -> runFreeT $ compPipe y' (f x')
-    Free (PYieldF x y) -> pure . Free $ PYieldF x (compPipe p y)
-  
-    -- lift (runFreeT p) >>= \case
---     Pure x -> lift (runFreeT q) >>= \case
---       Pure x' -> pure x'
---       Free (PAwaitF f' g') -> _ $ g' x'
--- --       -- Pure x'
--- --       -- Free (PAwaitF f' g') -> _ $ g' x'
--- --     -- FreeT $ go <$> runFreeT p <*> runFreeT q
--- --   -- where
--- --     -- go :: FreeF (PipeF a b u) v (FreeT (PipeF a b u) m v)
--- --     --    -> FreeF (PipeF b c v) r (FreeT (PipeF b c v) m r)
--- --     --    -> FreeF (PipeF a c u) r (FreeT (PipeF a c u) m r)
--- --     -- go = \case
--- --     --   Pure x -> \case
--- --     --     Pure x'              -> Pure x'
--- --     --     Free (PAwaitF f' g') -> undefined $ g' x
-
--- runFreeT p >>= \case
---     Pure x -> runFreeT q <&> \case
---       Pure x' -> Pure x'
---       Free qq -> case qq of
---         PAwaitF f' g' -> FreeF _
-      
-
--- (.|) :: forall a b c u m v r. Monad m => Pipe a b u m v -> Pipe b c v m r -> Pipe a c u m r
--- Pipe p .| Pipe q = Pipe $ FT go
--- -- Pipe p .| Pipe q = lift $ runReaderT (runFT (hoistFT lift q) pure go) p
--- --   where
--- --     go  :: (x -> ReaderT (FT (PipeF a b u) m v) m r)
--- --         -> PipeF b c v x
--- --         -> ReaderT (FT (PipeF a b u) m v) m r
--- --     go qNext = \case
--- --       PYieldF x y -> qNext y
--- --       PAwaitF f g -> ReaderT $ \p' ->
--- --         runFT p' (flip runReaderT p' . qNext . g) $ \pNext -> \case
--- --           PYieldF _ y' -> pNext y'
--- --           PAwaitF f' g' -> pNext . f' $ _
---       -- _ $ PYieldF _ _
---       -- qNext y
---       -- ReaderT $ \p' ->
---       --   qNext (PYieldF x y)
--- -- FT go
---   where
---     go :: forall q. (r -> m q) -> (forall x. (x -> m q) -> PipeF a c u x -> m q) -> m q
---     go fPure fFree = runReaderT (runFT (hoistFT lift q) (lift . fPure) breakdown) p
---       where
---         breakdown :: (x -> ReaderT (FT (PipeF a b u) m v) m q)
---                   -> PipeF b c v x
---                   -> ReaderT (FT (PipeF a b u) m v) m q
---         breakdown qNext = \case
---           PYieldF x y -> ReaderT $ \p' ->
---             fFree (flip runReaderT p' . qNext) (PYieldF x y)
---           PAwaitF f g -> ReaderT $ \p' ->
---             runFT p' (flip runReaderT p' . qNext . g) $ \pNext -> \case
---               PYieldF x' y' -> $ qNext (f x')
--- -- runReaderT (runFT (hoistFT _ q) _ _) p
-    
--- Pipe $ FT go
---     go fPure fFree = runFT q
---       fPure     -- if q is done, we are all done
---       (\qNext -> \case
---           PYieldF x y -> fFree qNext (PYieldF x y)
---           PAwaitF f g -> runFT p
---             (qNext . g)
---             (\pNext -> \case
---                 PYieldF x' _ -> qNext (f x')
---                 -- _ (qNext (f x')) (pNext y')
---                 -- qNext (f x')
---                 PAwaitF f' g' -> fFree pNext (PAwaitF f' g')
---             )
---       )
-
---     -- goRight :: PipeF a b u _ -> PipeF b c v _ -> PipeF a c u _
---     goRight left right = case right of
---       PYieldF x y -> PYieldF (goRight left x) y
---       -- PAwaitF f g -> 
--- --     go fPure fFree = runFT p
--- --       (\x -> runFT q fPure $ \qPure -> \case
--- --           PAwaitF _ g' -> qPure $ g' x
--- --           PYieldF _ y' -> qPure y'
--- --       )
--- --       (\pPure -> \case
--- --           PAwaitF f g -> runFT q fPure $ \qPure -> \case
--- --             PAwaitF f' g' -> fFree fPure (PAwaitF (_ . f) (_ . g))
--- --       )
-
-  -- where
--- \case
---     PAwait f g -> \q -> PAwait (\x -> f x .| q) (\x -> g x .| q)
---     p@(PYield x y) -> \case
---       PAwait f _   -> y .| f x
---       PYield x' y' -> PYield x' (p .| y')
---       PAct   x'    -> PAct ((p .|) <$> x')
---       PDone  r     -> PDone r
---     PAct   x   -> \q -> PAct ((.| q) <$> x)
---     r@(PDone  r') -> \case
---       PAwait _ g -> r .| g r'
---       PYield x y -> PYield x (r .| y)
---       PAct   x'  -> PAct ((r .|) <$> x')
---       PDone  s   -> PDone s
+      Pure x'              -> runFreeT $ compPipe_ p  (g x')
+      Free (PAwaitF f' g') -> pure . Free $ PAwaitF ((`compPipe_` q) . f')
+                                                    ((`compPipe_` q) . g')
+      Free (PYieldF x' y') -> runFreeT $ compPipe_ y' (f x')
+    Free (PYieldF x y) -> pure . Free $ PYieldF x (compPipe_ p y)
 infixr 2 .|
-
-
----- | Pipe
-----
----- *  @i@: Input
----- *  @o@: Output
----- *  @u@: Upstream result
----- *  @m@: Monad
----- *  @r@: Result
-----
----- Some specializations:
-----
----- *  If @i@ is '()', we have a producer.  If @r@ is 'Void', it will always
-----    produce.
----- *  If @o@ is 'Void', we have a consumer.
----- *  If @u@ is 'Void', the pipe will never stop producing.
-----
----- TODO: CPS this maybe
---data Pipe i o u m a =
---      PAwait (i -> Pipe i o u m a) (u -> Pipe i o u m a)
---    | PYield o (Pipe i o u m a)
---    | PAct (m (Pipe i o u m a))
---    | PDone a
---  deriving Functor
-
---(.|) :: Functor m => Pipe a b u m v -> Pipe b c v m r -> Pipe a c u m r
---(.|) = \case
---    PAwait f g -> \q -> PAwait (\x -> f x .| q) (\x -> g x .| q)
---    p@(PYield x y) -> \case
---      PAwait f _   -> y .| f x
---      PYield x' y' -> PYield x' (p .| y')
---      PAct   x'    -> PAct ((p .|) <$> x')
---      PDone  r     -> PDone r
---    PAct   x   -> \q -> PAct ((.| q) <$> x)
---    r@(PDone  r') -> \case
---      PAwait _ g -> r .| g r'
---      PYield x y -> PYield x (r .| y)
---      PAct   x'  -> PAct ((r .|) <$> x')
---      PDone  s   -> PDone s
---infixr 2 .|
-
---instance Functor m => Applicative (Pipe i o u m) where
---    pure = PDone
---    (<*>) = \case
---      PAwait f g -> \q -> PAwait ((<*> q) . f) ((<*> q) . g)
---      PYield x y -> \q -> PYield x (y <*> q)
---      PAct   x   -> \q -> PAct ((<*> q) <$> x)
---      PDone  f   -> fmap f
---    (*>) = \case
---      PAwait f g -> \q -> PAwait ((*> q) . f) ((*> q) . g)
---      PYield x y -> \q -> PYield x (y *> q)
---      PAct   x   -> \q -> PAct ((*> q) <$> x)
---      PDone  _   -> id
-
---instance Functor m => Monad (Pipe i o u m) where
---    return = PDone
---    (>>=) = \case
---      PAwait f g -> \q -> PAwait (f >=> q) (g >=> q)
---      PYield x y -> \q -> PYield x (y >>= q)
---      PAct   x   -> \q -> PAct ((>>= q) <$> x)
---      PDone  x   -> ($ x)
---    (>>)  = (*>)
-
---instance MonadTrans (Pipe i o u) where
---    lift = liftP
-
---liftP :: Functor m => m a -> Pipe i o u m a
---liftP = PAct . fmap PDone
-
---runPipe :: Monad m => Pipe () Void u m a -> m a
---runPipe = \case
---    PAwait f _ -> runPipe $ f ()
---    PYield x _ -> absurd x
---    PAct   x   -> runPipe =<< x
---    PDone  x   -> pure x
-
---yield :: o -> Pipe i o u m ()
---yield x = PYield x (PDone ())
-
---await :: Pipe i o u m (Maybe i)
---await = PAwait (PDone . Just) (\_ -> PDone Nothing)
-
---awaitSurely :: Pipe i o Void m i
---awaitSurely = PAwait PDone absurd
 
 unfoldP :: (b -> Maybe (a, b)) -> b -> Pipe i a u m ()
 unfoldP f = go
@@ -305,8 +108,8 @@ unfoldPForever f = go
 iterateP :: (a -> a) -> a -> Pipe i a u m r
 iterateP f = unfoldPForever (join (,) . f)
 
-sourceList :: [a] -> Pipe i a u m ()
-sourceList = unfoldP uncons
+sourceList :: Foldable t => t a -> Pipe i a u m ()
+sourceList = traverse_ yield
 
 repeatM :: Monad m => m o -> Pipe i o u m u
 repeatM x = go
@@ -314,15 +117,6 @@ repeatM x = go
     go = do
       yield =<< lift x
       go
-
--- repeatM x = go
---   where
---     go = PAct $ (`PYield` go) <$> x
-    -- go
-  -- where
-    -- go = do
-    --   yield =<< liftP x
-    --   go
 
 awaitForever :: (i -> Pipe i o u m a) -> Pipe i o u m u
 awaitForever f = go
@@ -350,90 +144,69 @@ foldrP f z = go
 sinkList :: Pipe i Void u m [i]
 sinkList = foldrP (:) []
 
----- interleaveP :: Pipe i o u () -> Pipe i o u () -> Pipe i o u ()
----- interleaveP p = case p of
-----     PAwait f g -> \case
-----       PAwait f' g' -> PAwait (interleaveP <$> f <*> f') (interleaveP <$> g <*> g')
-----       PYield x' y' -> PYield x' $ interleaveP p y'
-----       PDone _      -> p
-----     PYield x y -> \case
-----       q@(PAwait _ _) -> PYield x $ interleaveP y q
-----       PYield x' y'   -> PYield x . PYield x' $ interleaveP y y'
-----       PDone _        -> p
-----     PDone   _  -> id
+newtype ZipSink i u m a = ZipSink { getZipSink :: Pipe i Void u m a }
+  deriving Functor
 
---newtype ZipSink i u m a = ZipSink { getZipSink :: Pipe i Void u m a }
---  deriving Functor
+zipSink_
+    :: Monad m
+    => FreeT (PipeF i Void u) m (a -> b)
+    -> FreeT (PipeF i Void u) m a
+    -> FreeT (PipeF i Void u) m b
+zipSink_ p q = FreeT $ go <$> runFreeT p <*> runFreeT q
+  where
+    go = \case
+      Pure x             -> \case
+        Pure x'              -> Pure $ x x'
+        Free (PAwaitF f' g') -> Free $ PAwaitF (zipSink_ p . f') (zipSink_ p . g')
+        Free (PYieldF x' _ ) -> absurd x'
+      Free (PAwaitF f g) -> \case
+        Pure _               -> Free $ PAwaitF ((`zipSink_` q) . f) ((`zipSink_` q) . g)
+        Free (PAwaitF f' g') -> Free $ PAwaitF (zipSink_ <$> f <*> f') (zipSink_ <$> g <*> g')
+        Free (PYieldF x' _ ) -> absurd x'
+      Free (PYieldF x _) -> absurd x
 
----- | Feed the same input to two sinks, and return when they both finish.
---zipSink
---    :: Functor m
---    => Pipe i Void u m (a -> b)
---    -> Pipe i Void u m a
---    -> Pipe i Void u m b
---zipSink p q = case p of
---    PAwait f g -> case q of
---      PAwait f' g' -> PAwait (zipSink <$> f <*> f') (zipSink <$> g <*> g')
---      PYield x' _  -> absurd x'
---      PAct   x'    -> PAct (zipSink p <$> x')
---      PDone  _     -> PAwait ((`zipSink` q) . f) ((`zipSink` q) . g)
---    PYield x _ -> absurd x
---    PAct   x   -> PAct ((`zipSink` q) <$> x)
---    PDone  x   -> case q of
---      PAwait f' g' -> PAwait (zipSink p . f') (zipSink p . g')
---      PYield x' _  -> absurd x'
---      PAct   x'    -> PAct (zipSink p <$> x')
---      PDone  x'    -> PDone (x x')
+altSink_
+    :: Monad m
+    => FreeT (PipeF i Void u) m a
+    -> FreeT (PipeF i Void u) m a
+    -> FreeT (PipeF i Void u) m a
+altSink_ p q = FreeT $ go <$> runFreeT p <*> runFreeT q
+  where
+    go = \case
+      Pure x             -> \_ -> Pure x
+      Free (PAwaitF f g) -> \case
+        Pure x'              -> Pure x'
+        Free (PAwaitF f' g') -> Free $ PAwaitF (altSink_ <$> f <*> f') (altSink_ <$> g <*> g')
+        Free (PYieldF x' _ ) -> absurd x'
+      Free (PYieldF x _) -> absurd x
 
----- | Feed the same input to two sinks, and return when the first one
----- finishes.
---altSink
---    :: Functor m
---    => Pipe i Void u m a
---    -> Pipe i Void u m a
---    -> Pipe i Void u m a
---altSink p q = case p of
---    PAwait f g -> case q of
---      PAwait f' g' -> PAwait (altSink <$> f <*> f') (altSink <$> g <*> g')
---      PYield x' _  -> absurd x'
---      PAct   x'    -> PAct (altSink p <$> x')
---      PDone  x'    -> PDone x'
---    PYield x _ -> absurd x
---    PAct   x   -> case q of
---      PDone  x'   -> PDone x'
---      _           -> PAct ((`altSink` q) <$> x)
---    PDone  x   -> PDone x
+zipSink
+    :: Monad m
+    => Pipe i Void u m (a -> b)
+    -> Pipe i Void u m a
+    -> Pipe i Void u m b
+zipSink (Pipe p) (Pipe q) = Pipe $ toFT $ zipSink_ (fromFT p) (fromFT q)
 
----- | '<*>' = distribute input to all, and return result when they finish
-----
----- 'pure' = immediately finish
---instance Functor m => Applicative (ZipSink i u m) where
---    pure = ZipSink . pure
---    ZipSink p <*> ZipSink q = ZipSink $ zipSink p q
+altSink
+    :: Monad m
+    => Pipe i Void u m a
+    -> Pipe i Void u m a
+    -> Pipe i Void u m a
+altSink (Pipe p) (Pipe q) = Pipe $ toFT $ altSink_ (fromFT p) (fromFT q)
 
----- | '<|>' = distribute input to all, and return the first result that
----- finishes
-----
----- 'empty' = never finish
---instance Functor m => Alternative (ZipSink i u m) where
---    empty = ZipSink go
---      where
---        go = PAwait (const go) (const go)
---    ZipSink p <|> ZipSink q = ZipSink $ altSink p q
+-- | '<*>' = distribute input to all, and return result when they finish
+--
+-- 'pure' = immediately finish
+instance Monad m => Applicative (ZipSink i u m) where
+    pure = ZipSink . pure
+    ZipSink p <*> ZipSink q = ZipSink $ zipSink p q
 
-
-
----- -- hmm..... does this make sense as an alternative lol
----- instance Alternative (Pipe i o u) where
-----     empty = PAwait (const empty) (const empty)
-----     p <|> q = case p of
-----       PAwait f g -> case q of
-----         PAwait f' g' -> PAwait ((<|>) <$> f <*> f') ((<|>) <$> g <*> g')
-----         PYield x' y' -> PYield x' (p <|> y')
-----         PDone  _     -> q
-----       PYield x y -> case q of
-----         PAwait _  _  -> PYield x (y <|> q)
-----         PYield x' y' -> PYield x . PYield x' $ y <|> y'
-----         PDone  _     -> q
-----       PDone _    -> p
-
+-- | '<|>' = distribute input to all, and return the first result that
+-- finishes
+--
+-- 'empty' = never finish
+instance Monad m => Alternative (ZipSink i u m) where
+    empty = ZipSink go
+      where
+        go = forever await
+    ZipSink p <|> ZipSink q = ZipSink $ altSink p q
