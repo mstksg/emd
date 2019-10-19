@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeApplications                         #-}
 {-# LANGUAGE TypeInType                               #-}
 {-# LANGUAGE TypeOperators                            #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints            #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
@@ -220,7 +221,7 @@ iemd EMD{..} = foldl' (SVG.zipWith (+)) emdResidual emdIMFs
 data SiftResult v n a = SRResidual !(SVG.Vector v n a)
                       | SRIMF      !(SVG.Vector v n a) !Int   -- ^ number of sifting iterations
 
-type Sifter v n a = forall m. Functor m => Pipe (SVG.Vector v n a) Void Void m ()
+type Sifter v n a = forall m. Monad m => Pipe (SVG.Vector v n a) Void Void m ()
 
 siftTimes :: Int -> Sifter v n a
 siftTimes n = dropP (n - 1) >> void awaitSurely
