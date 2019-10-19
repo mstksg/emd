@@ -6,21 +6,12 @@ module Numeric.EMD.Internal.Pipe (
     Pipe
   , (.|)
   , runPipe
-  , awaitSurely
-  , repeatM
+  , awaitEither, await, awaitSurely
+  , repeatM, sourceList
+  , awaitForever, mapP, mapMP
   , dropP
+  , foldrP, sinkList
   , ZipSink(..)
-  -- , sinkList
-  -- , interleaveP
-  -- , yield
-  -- , await
-  -- , awaitForever
-  -- , sourceList
-  -- , unfoldP, unfoldPForever, sourceList, iterateP
-  -- , mapP
-  -- , mapMP
-  -- , takeP
-  -- , sinkList
   ) where
 
 import           Control.Applicative
@@ -110,23 +101,6 @@ await = PAwait (PDone . Just) (\_ -> PDone Nothing)
 awaitSurely :: Pipe i o Void m i
 awaitSurely = PAwait PDone absurd
 
--- unfoldP :: (b -> Maybe (a, b)) -> b -> Pipe i a u ()
--- unfoldP f = go
---   where
---     go z = case f z of
---       Nothing      -> PDone ()
---       Just (x, z') -> PYield x (go z')
-
--- unfoldPForever :: (b -> (a, b)) -> b -> Pipe i a u r
--- unfoldPForever f = go
---   where
---     go z = PYield x (go z')
---       where
---         (x, z') = f z
-
--- iterateP :: (a -> a) -> a -> Pipe i a u r
--- iterateP f = unfoldPForever (join (,) . f)
-
 sourceList :: Foldable t => t a -> Pipe i a u m ()
 sourceList = foldr PYield (PDone ())
 
@@ -150,10 +124,6 @@ mapMP f = awaitForever ((yield =<<) . lift . f)
 
 dropP :: Functor m => Int -> Pipe i o u m ()
 dropP n = replicateM_ n await
-    -- awaitForever yield
-
-takeP :: Functor m => Int -> Pipe i i u m ()
-takeP n = replicateM_ n $ mapM_ yield =<< await
 
 foldrP :: Functor m =>(a -> b -> b) -> b -> Pipe a Void u m b
 foldrP f z = go
@@ -164,18 +134,6 @@ foldrP f z = go
 
 sinkList :: Functor m => Pipe i Void u m [i]
 sinkList = foldrP (:) []
-
--- interleaveP :: Pipe i o u () -> Pipe i o u () -> Pipe i o u ()
--- interleaveP p = case p of
---     PAwait f g -> \case
---       PAwait f' g' -> PAwait (interleaveP <$> f <*> f') (interleaveP <$> g <*> g')
---       PYield x' y' -> PYield x' $ interleaveP p y'
---       PDone _      -> p
---     PYield x y -> \case
---       q@(PAwait _ _) -> PYield x $ interleaveP y q
---       PYield x' y'   -> PYield x . PYield x' $ interleaveP y y'
---       PDone _        -> p
---     PDone   _  -> id
 
 newtype ZipSink i u m a = ZipSink { getZipSink :: Pipe i Void u m a }
   deriving Functor

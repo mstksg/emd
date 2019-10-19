@@ -141,26 +141,6 @@ instance Fractional a => Default (SiftCondition a) where
 -- | Default 'SiftCondition'
 defaultSC :: Fractional a => SiftCondition a
 defaultSC = SCStdDev 0.3 `SCOr` SCTimes 50     -- R package uses SCTimes 20, Matlab uses no limit
--- defaultSC = SCStdDev 0.3
--- defaultSC = SCTimes 50
-
--- -- | 'True' if stop
--- testCondition
---     :: (VG.Vector v a, Fractional a, Ord a)
---     => SiftCondition a
---     -> Int
---     -> SVG.Vector v n a
---     -> SVG.Vector v n a
---     -> Bool
--- testCondition tc i v v' = go tc
---   where
---     sd = SVG.sum $ SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v'
---     go = \case
---       SCStdDev t -> sd <= t
---       SCTimes l  -> i >= l
---       SCOr  f g  -> go f || go g
---       SCAnd f g  -> go f && go g
---     eps = 0.0000001
 
 -- | An @'EMD' v n a@ is an Empirical Mode Decomposition of a time series
 -- with @n@ items of type @a@ stored in a vector @v@.
@@ -286,20 +266,6 @@ sift EO{..} v0 = case execStateT (runPipe sifterPipe) (0, v0) of
       case sift' eoSplineEnd eoBoundaryHandler v of
         Nothing  -> Left v
         Just !v' -> Right (v', (i + 1, v'))
-
--- -- | Iterated sifting process, used to produce either an IMF or a residual.
--- sift
---     :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
---     => EMDOpts a
---     -> SVG.Vector v (n + 1) a
---     -> SiftResult v (n + 1) a
--- sift EO{..} = go 1
---   where
---     go !i !v = case sift' eoSplineEnd eoBoundaryHandler v of
---       Nothing -> SRResidual v
---       Just !v'
---         | testCondition eoSiftCondition i v v' -> SRIMF v' i
---         | otherwise                            -> go (i + 1) v'
 
 -- | Single sift
 sift'
