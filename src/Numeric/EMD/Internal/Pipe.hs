@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
 
@@ -33,6 +34,7 @@ import           Control.Monad.Free.TH
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Free        (FreeT(..), FreeF(..))
 import           Control.Monad.Trans.Free.Church
+import           Control.Monad.Trans.Reader
 import           Data.Functor
 import           Data.Void
 import qualified Control.Monad.Trans.Free        as FM
@@ -67,16 +69,26 @@ runPipe = iterT go . pipeFree
       PAwaitF f _ -> f ()
       PYieldF o _ -> absurd o
 
-compPipe :: forall a b c u m v r. Monad m => FreeT (PipeF a b u) m v -> FreeT (PipeF b c v) m r -> FreeT (PipeF a c u) m r
-compPipe p q = FreeT $ go <$> runFreeT p <*> runFreeT q
-  where
-    go :: FreeF (PipeF a b u) v (FreeT (PipeF a b u) m v)
-       -> FreeF (PipeF b c v) r (FreeT (PipeF b c v) m r)
-       -> FreeF (PipeF a c u) r (FreeT (PipeF a c u) m r)
-    go = \case
-      Pure x -> \case
-        Pure x'              -> Pure x'
-        Free (PAwaitF f' g') -> undefined $ g' x
+-- (.|) :: forall a b c u m v r. Functor m => Pipe a b u m v -> Pipe b c v m r -> Pipe a c u m r
+-- Pipe p .| Pipe q = Pipe $ FT go
+
+compPipe :: forall a b c u v t m r. (Monad (t m), MonadTrans t, Monad m) => FreeT (PipeF a b u) m v -> FreeT (PipeF b c v) m r -> t m r
+-- FreeT (PipeF a c u) m r
+compPipe p q = lift (runFreeT p) >>= \case
+    Pure x -> lift (runFreeT q) >>= \case
+      Pure x' -> pure x'
+      Free (PAwaitF f' g') -> _ $ g' x'
+--       -- Pure x'
+--       -- Free (PAwaitF f' g') -> _ $ g' x'
+--     -- FreeT $ go <$> runFreeT p <*> runFreeT q
+--   -- where
+--     -- go :: FreeF (PipeF a b u) v (FreeT (PipeF a b u) m v)
+--     --    -> FreeF (PipeF b c v) r (FreeT (PipeF b c v) m r)
+--     --    -> FreeF (PipeF a c u) r (FreeT (PipeF a c u) m r)
+--     -- go = \case
+--     --   Pure x -> \case
+--     --     Pure x'              -> Pure x'
+--     --     Free (PAwaitF f' g') -> undefined $ g' x
 
 -- runFreeT p >>= \case
 --     Pure x -> runFreeT q <&> \case
@@ -89,15 +101,20 @@ compPipe p q = FreeT $ go <$> runFreeT p <*> runFreeT q
 -- Pipe p .| Pipe q = Pipe $ FT go
 --   where
 --     go :: (r -> m q) -> (forall x. (x -> m q) -> PipeF a c u x -> m q) -> m q
---     go fPure fFree = runFT p
---       (\x -> runFT q fPure $ \qPure -> \case
---           PAwaitF _ g' -> qPure $ g' x
---           PYieldF _ y' -> qPure y'
---       )
---       (\pPure -> \case
---           PAwaitF f g -> runFT q fPure $ \qPure -> \case
---             PAwaitF f' g' -> fFree fPure (PAwaitF (_ . f) (_ . g))
---       )
+--     go _ _ = undefined
+--     -- goRight :: PipeF a b u _ -> PipeF b c v _ -> PipeF a c u _
+--     goRight left right = case right of
+--       PYieldF x y -> PYieldF (goRight left x) y
+--       -- PAwaitF f g -> 
+-- --     go fPure fFree = runFT p
+-- --       (\x -> runFT q fPure $ \qPure -> \case
+-- --           PAwaitF _ g' -> qPure $ g' x
+-- --           PYieldF _ y' -> qPure y'
+-- --       )
+-- --       (\pPure -> \case
+-- --           PAwaitF f g -> runFT q fPure $ \qPure -> \case
+-- --             PAwaitF f' g' -> fFree fPure (PAwaitF (_ . f) (_ . g))
+-- --       )
 
   -- where
 -- \case
@@ -219,18 +236,24 @@ compPipe p q = FreeT $ go <$> runFreeT p <*> runFreeT q
 --iterateP :: (a -> a) -> a -> Pipe i a u m r
 --iterateP f = unfoldPForever (join (,) . f)
 
---sourceList :: Foldable t => t a -> Pipe i a u m ()
---sourceList = foldr PYield (PDone ())
+-- sourceList :: Foldable t => t a -> Pipe i a u m ()
+-- sourceList = foldr PYield (PDone ())
 
---repeatM :: Functor m => m o -> Pipe i o u m u
---repeatM x = go
---  where
---    go = PAct $ (`PYield` go) <$> x
---    -- go
---  -- where
---    -- go = do
---    --   yield =<< liftP x
---    --   go
+repeatM :: Monad m => m o -> Pipe i o u m u
+repeatM x = go
+  where
+    go = do
+      yield =<< lift x
+      go
+
+-- repeatM x = go
+--   where
+--     go = PAct $ (`PYield` go) <$> x
+    -- go
+  -- where
+    -- go = do
+    --   yield =<< liftP x
+    --   go
 
 --awaitForever :: Functor m => (i -> Pipe i o u m a) -> Pipe i o u m u
 --awaitForever f = go
