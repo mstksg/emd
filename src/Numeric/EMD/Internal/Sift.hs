@@ -260,9 +260,11 @@ toProj = \case
       sqrt . squareMag $ SVG.zipWith (\x y -> (x + y) / 2) ssMinEnv ssMaxEnv
     SPEnergyDiff -> \v0 ->
       let eX = squareMag v0
+          eX2 = eX * eX
       in  \SingleSift{..} ->
             let eTot = squareMag ssRes - squareMag (SVG.zipWith (-) v0 ssRes)
-            in  abs $ eX - eTot
+                eDiff = eX - eTot
+            in  (eDiff * eDiff) / eX2
   where
     squareMag = SVG.foldl' (\s x -> s + x*x) 0
 
