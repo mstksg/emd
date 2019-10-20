@@ -41,6 +41,19 @@ prop_iemd_edt = iemdProp edtEO
 prop_orthog_edt :: Property
 prop_orthog_edt = orthogProp edtEO
 
+sCondEO :: EMDOpts Double
+sCondEO = defaultEO
+    { eoSiftCondition = SCSCond 10
+                 `SCOr` SCTimes 100
+    }
+
+prop_iemd_sCond :: Property
+prop_iemd_sCond = iemdProp sCondEO
+
+prop_orthog_sCond :: Property
+prop_orthog_sCond = orthogProp sCondEO
+
+
 iemdProp :: EMDOpts Double -> Property
 iemdProp eo = property $ withSize (Range.linear 1 8) $ \(_ :: Proxy n) -> do
     xs <- forAll $ generateData @n

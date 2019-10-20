@@ -127,19 +127,32 @@ instance Fractional a => Default (EMDOpts a) where
 data SiftCondition a
     -- | Stop using standard SD method
     = SCStdDev !a
-    -- | When the difference between successive items reaches a given threshold 
+    -- | When the difference between successive items reaches a given threshold
     -- \(\tau\)
     --
     -- \[
     -- \frac{\left(f(t-1) - f(t)\right)^2}{f^2(t-1)} < \tau
     -- \]
+    --
+    -- @since 0.1.10.0
     | SCCauchy SiftProjection !a
     -- | When the value reaches a given threshold \(\tau\)
     --
     -- \[
     -- f(t) < \tau
     -- \]
+    --
+    -- @since 0.1.10.0
     | SCProj   SiftProjection !a
+    -- | S-condition criteria.
+    --
+    -- The S-number is the length of current streak where number of extrema
+    -- or zero crossings all differ at most by one.
+    --
+    -- Stop sifting when the S-number reaches a given amount.
+    --
+    -- @since 0.1.10.0
+    | SCSCond !Int
     -- | Stop after a fixed number of sifting iterations
     | SCTimes !Int
     -- | One or the other
@@ -294,6 +307,27 @@ siftCauchy p t = siftPairs $ \s s' ->
       δ   = ps' - ps
   in  ((δ * δ) / (ps * ps)) <= t
 
+siftSCond :: (VG.Vector v a, KnownNat n, Fractional a, Ord a) => Int -> Sifter v (n + 1) m a
+siftSCond n = go []
+  where
+    go cxs = do
+      v <- awaitSurely
+      let cx   = crossCount $ ssRes v
+          done = all ((<= 1) . abs . subtract cx) cxs
+      unless done $
+        go (take (n - 1) (cx : cxs))
+    crossCount xs = M.size mins + M.size maxs + crosses
+      where
+        (mins, maxs) = extrema xs
+        crosses = fst . flip execState (0, Nothing) . flip SVG.mapM_ xs $ \x -> modify $ \(!i, !y) ->
+          let xPos = x > 0
+              i'   = case y of
+                       Nothing -> i
+                       Just y'
+                         | xPos == y' -> i
+                         | otherwise  -> i + 1
+          in  (i', Just xPos)
+
 siftOr :: Monad m => Sifter v n m a -> Sifter v n m a -> Sifter v n m a
 siftOr p q = getZipSink $ ZipSink p <|> ZipSink q
 
@@ -301,16 +335,17 @@ siftAnd :: Monad m => Sifter v n m a -> Sifter v n m a -> Sifter v n m a
 siftAnd p q = getZipSink $ ZipSink p *> ZipSink q
 
 toSifter
-    :: (VG.Vector v a, Monad m, Floating a, Ord a)
-    => SVG.Vector v n a
+    :: (VG.Vector v a, KnownNat n, Monad m, Floating a, Ord a)
+    => SVG.Vector v (n + 1) a
     -> SiftCondition a
-    -> Sifter v n m a
+    -> Sifter v (n + 1) m a
 toSifter v0 = go
   where
     go = \case
       SCStdDev x -> siftStdDev x
       SCCauchy p x -> siftCauchy (toProj p v0) x
       SCProj   p x -> siftProj ((<= x) . toProj p v0)
+      SCSCond  n   -> siftSCond n
       SCTimes  i -> siftTimes i
       SCOr p q   -> siftOr (go p) (go q)
       SCAnd p q  -> siftAnd (go p) (go q)
