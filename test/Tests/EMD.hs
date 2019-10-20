@@ -31,7 +31,7 @@ prop_orthog_default = orthogProp defaultEO
 
 edtEO :: EMDOpts Double
 edtEO = defaultEO
-    { eoSiftCondition = (SCProj SPEnergyDiff 0.01 `SCAnd` SCProj SPEnvMeanSum 0.01)
+    { eoSiftCondition = scEnergyDiff 0.01 0.01
                  `SCOr` SCTimes 100
     }
 

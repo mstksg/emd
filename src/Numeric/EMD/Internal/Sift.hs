@@ -16,6 +16,7 @@ module Numeric.EMD.Internal.Sift (
     EMDOpts(..), defaultEO
   , BoundaryHandler(..)
   , SiftCondition(..), SiftProjection(..), defaultSC
+  , scEnergyDiff
   , SplineEnd(..)
   -- * Internal
   , sift, SiftResult(..)
@@ -144,6 +145,15 @@ instance Fractional a => Default (SiftCondition a) where
 defaultSC :: Fractional a => SiftCondition a
 defaultSC = SCStdDev 0.3 `SCOr` SCTimes 50     -- R package uses SCTimes 20, Matlab uses no limit
 
+
+-- | Cheng, Yu, Yang suggest pairing together an energy difference
+-- threshold with a threshold for mean envelope RMS.  This is a convenience
+-- function to construct that pairing.
+scEnergyDiff
+    :: a                -- ^ Threshold for Energy Difference
+    -> a                -- ^ Threshold for mean envelope RMS
+    -> SiftCondition a
+scEnergyDiff s t = SCProj SPEnergyDiff s `SCAnd` SCProj SPEnvMeanSum t
 
 
 -- | The result of a sifting operation.  Each sift either yields

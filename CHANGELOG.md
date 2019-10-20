@@ -1,6 +1,24 @@
 Changelog
 =========
 
+Version 0.1.10.0
+---------------
+
+*October 19, 2019*
+
+<https://github.com/mstksg/emd/releases/tag/v0.1.10.0>
+
+*   Sifting condition checking system has been revamped to be more flexible.
+*   New sift conditions added:
+    *   Projections based on functions:
+        *   Energy Difference function (for Energy Difference Tracking)
+        *   Mean envelope RMS
+    *   For the above, we can now stop sifting based on:
+        *   Those projections reaching a certain value
+        *   Successive values of those projections reaching a certain squared
+            difference (Cauchy-inspired convergence)
+    *   S-Number Criterion
+
 Version 0.1.9.0
 ---------------
 

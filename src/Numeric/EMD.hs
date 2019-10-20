@@ -50,7 +50,11 @@ module Numeric.EMD (
   , EMDOpts(..), defaultEO
   , BoundaryHandler(..)
   , SiftCondition(..), SiftProjection(..), defaultSC
+  , scEnergyDiff
   , SplineEnd(..)
+  -- * Internal
+  , sift, SiftResult(..)
+  , envelopes
   ) where
 
 import           Control.DeepSeq
