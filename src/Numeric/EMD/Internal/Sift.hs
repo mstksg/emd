@@ -212,7 +212,8 @@ siftSCond n = go []
     go cxs = do
       v <- awaitSurely
       let cx   = crossCount $ ssRes v
-          done = all ((<= 1) . abs . subtract cx) cxs
+          done = length cxs >= (n - 1)
+              && all ((<= 1) . abs . subtract cx) cxs
       unless done $
         go (take (n - 1) (cx : cxs))
     crossCount xs = M.size mins + M.size maxs + crosses
@@ -264,7 +265,7 @@ toProj = \case
       in  \SingleSift{..} ->
             let eTot = squareMag ssRes - squareMag (SVG.zipWith (-) v0 ssRes)
                 eDiff = eX - eTot
-            in  (eDiff * eDiff) / eX2
+            in  sqrt $ (eDiff * eDiff) / eX2
   where
     squareMag = SVG.foldl' (\s x -> s + x*x) 0
 
