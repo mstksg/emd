@@ -76,7 +76,7 @@ orthogProp eo = property $ withSize (Range.linear 8 10) $ \(_ :: Proxy n) -> do
     annotateShow orthoMatrix
     annotateShow fracBad
     when (length orthoMatrix < 6) discard
-    assert $ fracBad <= 0.25
+    assert $ fracBad <= 0.5
   where
     indices :: [Int]
     indices = [1..]
