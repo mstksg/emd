@@ -34,9 +34,10 @@ ghc-options:
 library:
   source-dirs: src
   other-modules:
-  - Numeric.EMD.Internal.Tridiagonal
   - Numeric.EMD.Internal.Extrema
   - Numeric.EMD.Internal.Pipe
+  - Numeric.EMD.Internal.Sift
+  - Numeric.EMD.Internal.Tridiagonal
   - Numeric.HHT.Internal.FFT
   dependencies:
   - array
