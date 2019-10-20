@@ -29,6 +29,18 @@ prop_iemd_default = iemdProp defaultEO
 prop_orthog_default :: Property
 prop_orthog_default = orthogProp defaultEO
 
+edtEO :: EMDOpts Double
+edtEO = defaultEO
+    { eoSiftCondition = (SCProj SPEnergyDiff 0.01 `SCAnd` SCProj SPEnvMeanSum 0.01)
+                 `SCOr` SCTimes 100
+    }
+
+prop_iemd_edt :: Property
+prop_iemd_edt = iemdProp edtEO
+
+prop_orthog_edt :: Property
+prop_orthog_edt = orthogProp edtEO
+
 iemdProp :: EMDOpts Double -> Property
 iemdProp eo = property $ withSize (Range.linear 1 8) $ \(_ :: Proxy n) -> do
     xs <- forAll $ generateData @n

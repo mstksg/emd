@@ -46,7 +46,11 @@ module Numeric.EMD (
   , emd'
   , iemd
   , EMD(..)
-  , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
+  -- ** Configuration
+  , EMDOpts(..), defaultEO
+  , BoundaryHandler(..)
+  , SiftCondition(..), SiftProjection(..), defaultSC
+  , SplineEnd(..)
   -- * Internal
   , sift, SiftResult(..)
   , envelopes
@@ -123,6 +127,19 @@ instance Fractional a => Default (EMDOpts a) where
 data SiftCondition a
     -- | Stop using standard SD method
     = SCStdDev !a
+    -- | When the difference between successive items reaches a given threshold 
+    -- \(\tau\)
+    --
+    -- \[
+    -- \frac{\left(f(t-1) - f(t)\right)^2}{f^2(t-1)} < \tau
+    -- \]
+    | SCCauchy SiftProjection !a
+    -- | When the value reaches a given threshold \(\tau\)
+    --
+    -- \[
+    -- f(t) < \tau
+    -- \]
+    | SCProj   SiftProjection !a
     -- | Stop after a fixed number of sifting iterations
     | SCTimes !Int
     -- | One or the other
@@ -130,6 +147,19 @@ data SiftCondition a
     -- | Stop when both conditions are met
     | SCAnd (SiftCondition a) (SiftCondition a)
   deriving (Show, Eq, Ord, Generic)
+
+-- | A projection of sifting data.  Used as a part of 'SiftCondition' to
+-- describe 'SCCauchy' and 'SCProj'.
+--
+-- @since 0.1.10.0
+data SiftProjection
+    -- | The root mean square of the envelope means
+    = SPEnvMeanSum
+    -- | The "energy difference" quotient (Cheng, Yu, Yang 2005)
+    | SPEnergyDiff
+  deriving (Show, Eq, Ord, Generic)
+
+instance Bi.Binary SiftProjection
 
 -- | @since 0.1.3.0
 instance Bi.Binary a => Bi.Binary (SiftCondition a)
@@ -172,7 +202,7 @@ instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (EMD v n a) w
 -- 1.  The resulting 'EMD' contains IMFs that are all the same length as
 --     the input vector
 -- 2.  We provide a vector of size of at least one.
-emd :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+emd :: (VG.Vector v a, KnownNat n, Floating a, Ord a)
     => EMDOpts a
     -> SVG.Vector v (n + 1) a
     -> EMD v (n + 1) a
@@ -181,7 +211,7 @@ emd eo = runIdentity . emd' (const (pure ())) eo
 -- | 'emd', but tracing results to stdout as IMFs are found.  Useful for
 -- debugging to see how long each step is taking.
 emdTrace
-    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m)
+    :: (VG.Vector v a, KnownNat n, Floating a, Ord a, MonadIO m)
     => EMDOpts a
     -> SVG.Vector v (n + 1) a
     -> m (EMD v (n + 1) a)
@@ -191,7 +221,7 @@ emdTrace = emd' $ \case
 
 -- | 'emd' with a callback for each found IMF.
 emd'
-    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a, Applicative m)
+    :: (VG.Vector v a, KnownNat n, Floating a, Ord a, Applicative m)
     => (SiftResult v (n + 1) a -> m r)
     -> EMDOpts a
     -> SVG.Vector v (n + 1) a
@@ -220,21 +250,49 @@ iemd EMD{..} = foldl' (SVG.zipWith (+)) emdResidual emdIMFs
 data SiftResult v n a = SRResidual !(SVG.Vector v n a)
                       | SRIMF      !(SVG.Vector v n a) !Int   -- ^ number of sifting iterations
 
-type Sifter v n m a = Pipe (SVG.Vector v n a) Void Void m ()
+-- | Result of a single sift
+data SingleSift v n a = SingleSift
+    { ssRes    :: !(SVG.Vector v n a)
+    , ssMinEnv :: !(SVG.Vector v n a)
+    , ssMaxEnv :: !(SVG.Vector v n a)
+    }
+
+type Sifter v n m a = Pipe (SingleSift v n a) Void Void m ()
 
 siftTimes :: Int -> Sifter v n m a
 siftTimes n = dropP (n - 1) >> void awaitSurely
 
-siftStdDev :: forall v n m a. (VG.Vector v a, Fractional a, Ord a) => a -> Sifter v n m a
-siftStdDev t = go =<< awaitSurely
+siftProj :: (SingleSift v n a -> Bool) -> Sifter v n m a
+siftProj p = go
   where
-    go v = do
-      v' <- awaitSurely
-      let sd = SVG.sum $ SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v'
-      if sd <= t
-        then pure ()
-        else go v'
+    go = do
+      v <- awaitSurely
+      unless (p v) go
+
+siftPairs :: (SingleSift v n a -> SingleSift v n a -> Bool) -> Sifter v n m a
+siftPairs p = go =<< awaitSurely
+  where
+    go s = do
+      s' <- awaitSurely
+      unless (p s s') (go s')
+
+siftStdDev :: forall v n m a. (VG.Vector v a, Fractional a, Ord a) => a -> Sifter v n m a
+siftStdDev t = siftPairs $ \(SingleSift v _ _) (SingleSift v' _ _) ->
+    SVG.sum (SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v')
+      <= t
+  where
     eps = 0.0000001
+
+siftCauchy
+    :: (Fractional b, Ord b)
+    => (SingleSift v n a -> b)
+    -> b
+    -> Sifter v n m a
+siftCauchy p t = siftPairs $ \s s' ->
+  let ps  = p s
+      ps' = p s'
+      δ   = ps' - ps
+  in  ((δ * δ) / (ps * ps)) <= t
 
 siftOr :: Monad m => Sifter v n m a -> Sifter v n m a -> Sifter v n m a
 siftOr p q = getZipSink $ ZipSink p <|> ZipSink q
@@ -242,16 +300,42 @@ siftOr p q = getZipSink $ ZipSink p <|> ZipSink q
 siftAnd :: Monad m => Sifter v n m a -> Sifter v n m a -> Sifter v n m a
 siftAnd p q = getZipSink $ ZipSink p *> ZipSink q
 
-toSifter :: (VG.Vector v a, Monad m, Fractional a, Ord a) => SiftCondition a -> Sifter v n m a
-toSifter = \case
-    SCStdDev x -> siftStdDev x
-    SCTimes  i -> siftTimes i
-    SCOr p q   -> siftOr (toSifter p) (toSifter q)
-    SCAnd p q  -> siftAnd (toSifter p) (toSifter q)
+toSifter
+    :: (VG.Vector v a, Monad m, Floating a, Ord a)
+    => SVG.Vector v n a
+    -> SiftCondition a
+    -> Sifter v n m a
+toSifter v0 = go
+  where
+    go = \case
+      SCStdDev x -> siftStdDev x
+      SCCauchy p x -> siftCauchy (toProj p v0) x
+      SCProj   p x -> siftProj ((<= x) . toProj p v0)
+      SCTimes  i -> siftTimes i
+      SCOr p q   -> siftOr (go p) (go q)
+      SCAnd p q  -> siftAnd (go p) (go q)
+
+toProj
+    :: (VG.Vector v a, Floating a)
+    => SiftProjection
+    -> SVG.Vector v n a
+    -> SingleSift v n a
+    -> a
+toProj = \case
+    SPEnvMeanSum -> \_ SingleSift{..} ->
+      sqrt . squareMag $ SVG.zipWith (\x y -> (x + y) / 2) ssMinEnv ssMaxEnv
+    SPEnergyDiff -> \v0 ->
+      let eX = squareMag v0
+      in  \SingleSift{..} ->
+            let eTot = squareMag ssRes - squareMag (SVG.zipWith (-) v0 ssRes)
+            in  abs $ eX - eTot
+  where
+    squareMag = SVG.foldl' (\s x -> s + x*x) 0
+
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
 sift
-    :: forall v n a. (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+    :: forall v n a. (VG.Vector v a, KnownNat n, Floating a, Ord a)
     => EMDOpts a
     -> SVG.Vector v (n + 1) a
     -> SiftResult v (n + 1) a
@@ -260,11 +344,11 @@ sift EO{..} v0 = case execStateT (runPipe sifterPipe) (0, v0) of
     Right (!i, !v) -> SRIMF v i
   where
     sifterPipe = repeatM go
-              .| toSifter eoSiftCondition
+              .| toSifter v0 eoSiftCondition
     go = StateT $ \(!i, !v) ->
       case sift' eoSplineEnd eoBoundaryHandler v of
-        Nothing  -> Left v
-        Just !v' -> Right (v', (i + 1, v'))
+        Nothing                -> Left v
+        Just ss@SingleSift{..} -> Right (ss, (i + 1, ssRes))
 
 -- | Single sift
 sift'
@@ -272,10 +356,14 @@ sift'
     => SplineEnd a
     -> Maybe BoundaryHandler
     -> SVG.Vector v (n + 1) a
-    -> Maybe (SVG.Vector v (n + 1) a)
-sift' se bh v = go <$> envelopes se bh v
-  where
-    go (mins, maxs) = SVG.zipWith3 (\x mi ma -> x - (mi + ma)/2) v mins maxs
+    -> Maybe (SingleSift v (n + 1) a)
+sift' se bh v = do
+    (mins, maxs) <- envelopes se bh v
+    pure SingleSift
+      { ssRes    = SVG.zipWith3 (\x mi ma -> x - (mi + ma)/2) v mins maxs
+      , ssMinEnv = mins
+      , ssMaxEnv = maxs
+      }
 
 -- | Returns cubic splines of local minimums and maximums.  Returns
 -- 'Nothing' if there are not enough local minimum or maximums to create
