@@ -65,8 +65,8 @@ instance Data.Binary.Class.Binary a => Data.Binary.Class.Binary (Numeric.EMD.Int
 --   
 --   There are many functions to convert unsized vectors to sized vectors
 --   in <a>Data.Vector.Sized</a> and associated modules, including
---   <tt>toSized</tt> (for when you know the size at compile-time) and
---   <tt>withSized</tt> (for when you don't).
+--   <a>toSized</a> (for when you know the size at compile-time) and
+--   <a>withSized</a> (for when you don't).
 module Numeric.EMD
 
 -- | EMD decomposition of a given time series with a given sifting stop
@@ -119,6 +119,8 @@ EO :: SiftCondition a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts a
 
 -- | Default <a>EMDOpts</a>
 defaultEO :: Fractional a => EMDOpts a
+
+-- | Boundary conditions for splines.
 data BoundaryHandler
 
 -- | Clamp envelope at end points (Matlab implementation)
@@ -298,7 +300,7 @@ ihht :: (Vector v a, Floating a) => HHT v n a -> Vector v (n + 1) a
 --   Takes a "binning" function to allow you to specify how specific you
 --   want your frequencies to be.
 --   
---   See <tt>hhtSparseSpetrum</tt> for a sparser version, and
+--   See <a>hhtSparseSpectrum</a> for a sparser version, and
 --   <a>hhtDenseSpectrum</a> for a denser version.
 hhtSpectrum :: forall v n a k. (Vector v a, KnownNat n, Ord k, Num a) => (a -> k) -> HHT v n a -> Vector n (Map k a)
 
@@ -373,6 +375,8 @@ EO :: SiftCondition a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts a
 
 -- | Default <a>EMDOpts</a>
 defaultEO :: Fractional a => EMDOpts a
+
+-- | Boundary conditions for splines.
 data BoundaryHandler
 
 -- | Clamp envelope at end points (Matlab implementation)

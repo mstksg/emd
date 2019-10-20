@@ -61,7 +61,7 @@ $cfmap :: forall i o u a b. (a -&gt; b) -&gt; PipeF i o u a -&gt; PipeF i o u b
 </span><span id="line-45"></span><span class="hs-comment">--</span><span>
 </span><span id="line-46"></span><span class="hs-comment">-- Some specializations:</span><span>
 </span><span id="line-47"></span><span class="hs-comment">--</span><span>
-</span><span id="line-48"></span><span class="hs-comment">-- *  A pipe is a /producer/ if @i@ is '()': it doesn't need anything to go</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- *  A pipe is a /producer/ if @i@ is @()@: it doesn't need anything to go</span><span>
 </span><span id="line-49"></span><span class="hs-comment">--    pump out items.</span><span>
 </span><span id="line-50"></span><span class="hs-comment">--</span><span>
 </span><span id="line-51"></span><span class="hs-comment">--    If a pipe is producer and @a@ is 'Void', it means that it will</span><span>
