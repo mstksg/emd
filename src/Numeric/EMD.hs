@@ -34,9 +34,9 @@
 -- 2.  We provide a vector of size of at least one.
 --
 -- There are many functions to convert unsized vectors to sized vectors in
--- "Data.Vector.Sized" and associated modules, including 'toSized' (for
--- when you know the size at compile-time) and 'withSized' (for when you
--- don't).
+-- "Data.Vector.Sized" and associated modules, including
+-- 'Data.Vector.Sized.toSized' (for when you know the size at compile-time)
+-- and 'Data.Vector.Sized.withSized' (for when you don't).
 --
 
 module Numeric.EMD (

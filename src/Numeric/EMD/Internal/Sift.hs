@@ -61,6 +61,7 @@ instance Fractional a => Default (EMDOpts a) where
     def = defaultEO
 
 
+-- | Boundary conditions for splines.
 data BoundaryHandler
     -- | Clamp envelope at end points (Matlab implementation)
     = BHClamp

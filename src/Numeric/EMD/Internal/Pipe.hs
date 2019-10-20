@@ -45,7 +45,7 @@ makeFree ''PipeF
 --
 -- Some specializations:
 --
--- *  A pipe is a /producer/ if @i@ is '()': it doesn't need anything to go
+-- *  A pipe is a /producer/ if @i@ is @()@: it doesn't need anything to go
 --    pump out items.
 --
 --    If a pipe is producer and @a@ is 'Void', it means that it will

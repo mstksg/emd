@@ -204,8 +204,8 @@ instance (Ord k, Num a) => Monoid (SumMap k a) where
 -- Takes a "binning" function to allow you to specify how specific you want
 -- your frequencies to be.
 --
--- See 'hhtSparseSpetrum' for a sparser version, and 'hhtDenseSpectrum' for
--- a denser version.
+-- See 'hhtSparseSpectrum' for a sparser version, and 'hhtDenseSpectrum'
+-- for a denser version.
 hhtSpectrum
     :: forall v n a k. (VG.Vector v a, KnownNat n, Ord k, Num a)
     => (a -> k)     -- ^ binning function.  takes rev/tick freq between 0 and 1.

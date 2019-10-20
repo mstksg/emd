@@ -80,4 +80,3 @@ orthogProp eo = property $ withSize (Range.linear 8 10) $ \(_ :: Proxy n) -> do
   where
     indices :: [Int]
     indices = [1..]
-    -- tripping (CE xs) (emd @_ @_ @(2^n-1) eo . getCE) (Identity . CE . iemd)

@@ -1,6 +1,6 @@
 {-# LANGUAGE ApplicativeDo                            #-}
 {-# LANGUAGE DataKinds                                #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric                            #-}
 {-# LANGUAGE GADTs                                    #-}
 {-# LANGUAGE RecordWildCards                          #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}

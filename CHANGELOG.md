@@ -18,6 +18,7 @@ Version 0.1.10.0
         *   Successive values of those projections reaching a certain squared
             difference (Cauchy-inspired convergence)
     *   S-Number Criterion
+*   Add test suites
 
 Version 0.1.9.0
 ---------------
