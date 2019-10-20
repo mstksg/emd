@@ -7,7 +7,7 @@
 --   Empirical Mode decomposition and Hilbert-Huang Transform in pure
 --   Haskell.
 @package emd
-@version 0.1.9.0
+@version 0.1.10.0
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -79,14 +79,14 @@ module Numeric.EMD
 --   length as the input vector</li>
 --   <li>We provide a vector of size of at least one.</li>
 --   </ol>
-emd :: (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (n + 1) a -> EMD v (n + 1) a
+emd :: (Vector v a, KnownNat n, Floating a, Ord a) => EMDOpts a -> Vector v (n + 1) a -> EMD v (n + 1) a
 
 -- | <a>emd</a>, but tracing results to stdout as IMFs are found. Useful
 --   for debugging to see how long each step is taking.
-emdTrace :: (Vector v a, KnownNat n, Fractional a, Ord a, MonadIO m) => EMDOpts a -> Vector v (n + 1) a -> m (EMD v (n + 1) a)
+emdTrace :: (Vector v a, KnownNat n, Floating a, Ord a, MonadIO m) => EMDOpts a -> Vector v (n + 1) a -> m (EMD v (n + 1) a)
 
 -- | <a>emd</a> with a callback for each found IMF.
-emd' :: (Vector v a, KnownNat n, Fractional a, Ord a, Applicative m) => (SiftResult v (n + 1) a -> m r) -> EMDOpts a -> Vector v (n + 1) a -> m (EMD v (n + 1) a)
+emd' :: (Vector v a, KnownNat n, Floating a, Ord a, Applicative m) => (SiftResult v (n + 1) a -> m r) -> EMDOpts a -> Vector v (n + 1) a -> m (EMD v (n + 1) a)
 
 -- | Collapse an <a>EMD</a> back into its original time series. Should be a
 --   left-inverse to <a>emd</a>: using <a>iemd</a> on the result of
@@ -145,6 +145,25 @@ data SiftCondition a
 -- | Stop using standard SD method
 SCStdDev :: !a -> SiftCondition a
 
+-- | When the difference between successive items reaches a given threshold
+--   &lt;math&gt;
+--   
+--   &lt;math&gt;
+SCCauchy :: SiftProjection -> !a -> SiftCondition a
+
+-- | When the value reaches a given threshold &lt;math&gt;
+--   
+--   &lt;math&gt;
+SCProj :: SiftProjection -> !a -> SiftCondition a
+
+-- | S-condition criteria.
+--   
+--   The S-number is the length of current streak where number of extrema
+--   or zero crossings all differ at most by one.
+--   
+--   Stop sifting when the S-number reaches a given amount.
+SCSCond :: !Int -> SiftCondition a
+
 -- | Stop after a fixed number of sifting iterations
 SCTimes :: !Int -> SiftCondition a
 
@@ -154,8 +173,23 @@ SCOr :: SiftCondition a -> SiftCondition a -> SiftCondition a
 -- | Stop when both conditions are met
 SCAnd :: SiftCondition a -> SiftCondition a -> SiftCondition a
 
+-- | A projection of sifting data. Used as a part of <a>SiftCondition</a>
+--   to describe <a>SCCauchy</a> and <a>SCProj</a>.
+data SiftProjection
+
+-- | The root mean square of the envelope means
+SPEnvMeanSum :: SiftProjection
+
+-- | The "energy difference" quotient (Cheng, Yu, Yang 2005)
+SPEnergyDiff :: SiftProjection
+
 -- | Default <a>SiftCondition</a>
 defaultSC :: Fractional a => SiftCondition a
+
+-- | Cheng, Yu, Yang suggest pairing together an energy difference
+--   threshold with a threshold for mean envelope RMS. This is a
+--   convenience function to construct that pairing.
+scEnergyDiff :: a -> a -> SiftCondition a
 
 -- | End condition for spline
 data SplineEnd a
@@ -172,7 +206,7 @@ SENatural :: SplineEnd a
 SEClamped :: a -> a -> SplineEnd a
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
-sift :: forall v n a. (Vector v a, KnownNat n, Fractional a, Ord a) => EMDOpts a -> Vector v (n + 1) a -> SiftResult v (n + 1) a
+sift :: forall v n a. (Vector v a, KnownNat n, Floating a, Ord a) => EMDOpts a -> Vector v (n + 1) a -> SiftResult v (n + 1) a
 
 -- | The result of a sifting operation. Each sift either yields a residual,
 --   or a new IMF.
@@ -190,25 +224,8 @@ instance GHC.Classes.Ord (v a) => GHC.Classes.Ord (Numeric.EMD.EMD v n a)
 instance GHC.Classes.Eq (v a) => GHC.Classes.Eq (Numeric.EMD.EMD v n a)
 instance GHC.Generics.Generic (Numeric.EMD.EMD v n a)
 instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.EMD.EMD v n a)
-instance GHC.Generics.Generic (Numeric.EMD.EMDOpts a)
-instance GHC.Classes.Ord a => GHC.Classes.Ord (Numeric.EMD.EMDOpts a)
-instance GHC.Classes.Eq a => GHC.Classes.Eq (Numeric.EMD.EMDOpts a)
-instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.EMDOpts a)
-instance GHC.Generics.Generic (Numeric.EMD.SiftCondition a)
-instance GHC.Classes.Ord a => GHC.Classes.Ord (Numeric.EMD.SiftCondition a)
-instance GHC.Classes.Eq a => GHC.Classes.Eq (Numeric.EMD.SiftCondition a)
-instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.SiftCondition a)
-instance GHC.Generics.Generic Numeric.EMD.BoundaryHandler
-instance GHC.Classes.Ord Numeric.EMD.BoundaryHandler
-instance GHC.Classes.Eq Numeric.EMD.BoundaryHandler
-instance GHC.Show.Show Numeric.EMD.BoundaryHandler
 instance Control.DeepSeq.NFData (v a) => Control.DeepSeq.NFData (Numeric.EMD.EMD v n a)
 instance (Data.Vector.Generic.Base.Vector v a, GHC.TypeNats.KnownNat n, Data.Binary.Class.Binary (v a)) => Data.Binary.Class.Binary (Numeric.EMD.EMD v n a)
-instance Data.Binary.Class.Binary a => Data.Binary.Class.Binary (Numeric.EMD.EMDOpts a)
-instance GHC.Real.Fractional a => Data.Default.Class.Default (Numeric.EMD.EMDOpts a)
-instance Data.Binary.Class.Binary a => Data.Binary.Class.Binary (Numeric.EMD.SiftCondition a)
-instance GHC.Real.Fractional a => Data.Default.Class.Default (Numeric.EMD.SiftCondition a)
-instance Data.Binary.Class.Binary Numeric.EMD.BoundaryHandler
 
 
 -- | Hilbert-Huang transform in pure Haskell.
@@ -381,6 +398,25 @@ data SiftCondition a
 
 -- | Stop using standard SD method
 SCStdDev :: !a -> SiftCondition a
+
+-- | When the difference between successive items reaches a given threshold
+--   &lt;math&gt;
+--   
+--   &lt;math&gt;
+SCCauchy :: SiftProjection -> !a -> SiftCondition a
+
+-- | When the value reaches a given threshold &lt;math&gt;
+--   
+--   &lt;math&gt;
+SCProj :: SiftProjection -> !a -> SiftCondition a
+
+-- | S-condition criteria.
+--   
+--   The S-number is the length of current streak where number of extrema
+--   or zero crossings all differ at most by one.
+--   
+--   Stop sifting when the S-number reaches a given amount.
+SCSCond :: !Int -> SiftCondition a
 
 -- | Stop after a fixed number of sifting iterations
 SCTimes :: !Int -> SiftCondition a
