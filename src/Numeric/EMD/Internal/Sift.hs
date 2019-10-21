@@ -242,13 +242,13 @@ toSifter
 toSifter v0 = go
   where
     go = \case
-      SCStdDev x -> siftStdDev x
+      SCStdDev x   -> siftStdDev x
       SCCauchy p x -> siftCauchy (toProj p v0) x
       SCProj   p x -> siftProj ((<= x) . toProj p v0)
       SCSCond  n   -> siftSCond n
-      SCTimes  i -> siftTimes i
-      SCOr p q   -> siftOr (go p) (go q)
-      SCAnd p q  -> siftAnd (go p) (go q)
+      SCTimes  i   -> siftTimes i
+      SCOr p q     -> siftOr (go p) (go q)
+      SCAnd p q    -> siftAnd (go p) (go q)
 
 toProj
     :: (VG.Vector v a, KnownNat n, Floating a)
@@ -257,8 +257,11 @@ toProj
     -> SingleSift v n a
     -> a
 toProj = \case
-    SPEnvMeanSum -> \_ SingleSift{..} ->
-      sqrt . rms $ SVG.zipWith (\x y -> (x + y) / 2) ssMinEnv ssMaxEnv
+    SPEnvMeanSum -> \v0 ->
+      let eX  = rms v0
+      in  \SingleSift{..} ->
+            let mrms = rms $ SVG.zipWith (\x y -> (x + y) / 2) ssMinEnv ssMaxEnv
+            in  sqrt $ mrms / eX
     SPEnergyDiff -> \v0 ->
       let eX  = rms v0
           eX2 = eX * eX
