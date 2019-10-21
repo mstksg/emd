@@ -251,23 +251,23 @@ toSifter v0 = go
       SCAnd p q  -> siftAnd (go p) (go q)
 
 toProj
-    :: (VG.Vector v a, Floating a)
+    :: (VG.Vector v a, KnownNat n, Floating a)
     => SiftProjection
     -> SVG.Vector v n a
     -> SingleSift v n a
     -> a
 toProj = \case
     SPEnvMeanSum -> \_ SingleSift{..} ->
-      sqrt . squareMag $ SVG.zipWith (\x y -> (x + y) / 2) ssMinEnv ssMaxEnv
+      sqrt . rms $ SVG.zipWith (\x y -> (x + y) / 2) ssMinEnv ssMaxEnv
     SPEnergyDiff -> \v0 ->
-      let eX = squareMag v0
+      let eX  = rms v0
           eX2 = eX * eX
       in  \SingleSift{..} ->
-            let eTot = squareMag ssRes - squareMag (SVG.zipWith (-) v0 ssRes)
+            let eTot  = rms ssRes - rms (SVG.zipWith (-) v0 ssRes)
                 eDiff = eX - eTot
             in  sqrt $ (eDiff * eDiff) / eX2
   where
-    squareMag = SVG.foldl' (\s x -> s + x*x) 0
+    rms xs = SVG.foldl' (\s x -> s + x*x) 0 xs / fromIntegral (SVG.length xs)
 
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
