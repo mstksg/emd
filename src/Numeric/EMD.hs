@@ -49,8 +49,7 @@ module Numeric.EMD (
   -- ** Configuration
   , EMDOpts(..), defaultEO
   , BoundaryHandler(..)
-  , SiftCondition(..), SiftProjection(..), defaultSC
-  , scEnergyDiff
+  , defaultSifter
   , SplineEnd(..)
   -- * Internal
   , sift, SiftResult(..)
@@ -100,7 +99,7 @@ instance (VG.Vector v a, KnownNat n, Bi.Binary (v a)) => Bi.Binary (EMD v n a) w
 --     the input vector
 -- 2.  We provide a vector of size of at least one.
 emd :: (VG.Vector v a, KnownNat n, Floating a, Ord a)
-    => EMDOpts a
+    => EMDOpts v (n + 1) a
     -> SVG.Vector v (n + 1) a
     -> EMD v (n + 1) a
 emd eo = runIdentity . emd' (const (pure ())) eo
@@ -109,7 +108,7 @@ emd eo = runIdentity . emd' (const (pure ())) eo
 -- debugging to see how long each step is taking.
 emdTrace
     :: (VG.Vector v a, KnownNat n, Floating a, Ord a, MonadIO m)
-    => EMDOpts a
+    => EMDOpts v (n + 1) a
     -> SVG.Vector v (n + 1) a
     -> m (EMD v (n + 1) a)
 emdTrace = emd' $ \case
@@ -120,7 +119,7 @@ emdTrace = emd' $ \case
 emd'
     :: (VG.Vector v a, KnownNat n, Floating a, Ord a, Applicative m)
     => (SiftResult v (n + 1) a -> m r)
-    -> EMDOpts a
+    -> EMDOpts v (n + 1) a
     -> SVG.Vector v (n + 1) a
     -> m (EMD v (n + 1) a)
 emd' cb eo = go id

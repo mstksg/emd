@@ -45,6 +45,8 @@ extra-deps:
 - indexed-list-literals-0.2.1.2
 - typelits-witnesses-0.4.0.0
 - vector-sized-1.4.0.0
+- conduino-0.2.0.0
+- list-transformer-1.0.6
 
 build:
   haddock-arguments:

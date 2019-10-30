@@ -31,8 +31,8 @@ prop_orthog_default = orthogProp defaultEO
 
 edtEO :: EMDOpts Double
 edtEO = defaultEO
-    { eoSiftCondition = scEnergyDiff 0.01 0.01
-                 `SCOr` SCTimes 100
+    { eoSifter = siftEnergyDiff 0.01 0.01
+        `siftOr` siftTimes 100
     }
 
 prop_iemd_edt :: Property
@@ -41,10 +41,10 @@ prop_iemd_edt = iemdProp edtEO
 prop_orthog_edt :: Property
 prop_orthog_edt = orthogProp edtEO
 
-sCondEO :: EMDOpts Double
+sCondEO :: EMDOpts _ _ Double
 sCondEO = defaultEO
-    { eoSiftCondition = SCSCond 10
-                 `SCOr` SCTimes 100
+    { eoSifter = siftSCond 10
+        `siftOr` siftTimes 100
     }
 
 prop_iemd_sCond :: Property

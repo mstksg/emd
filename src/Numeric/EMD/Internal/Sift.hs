@@ -15,49 +15,70 @@
 module Numeric.EMD.Internal.Sift (
     EMDOpts(..), defaultEO
   , BoundaryHandler(..)
-  , SiftCondition(..), SiftProjection(..), defaultSC
-  , scEnergyDiff
   , SplineEnd(..)
+  -- * Sifters
+  , defaultSifter
+  , siftStdDev
+  , siftTimes
+  , siftEnergyDiff
+  , siftSCond
+  , siftAnd
+  , siftOr
+  -- ** Make Sifters
+  , envMean
+  , energyDiff
+  , normalizeProj
+  , siftCauchy
+  , siftPairs
+  , siftProj
+  , siftPairs_
+  , siftProj_
   -- * Internal
   , sift, SiftResult(..)
   , envelopes
+  , rms
   ) where
 
-import           Control.Applicative
 import           Control.Monad
+import           Control.Monad.Trans.Class
+import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
+import           Data.Conduino
+import           Data.Conduino.Internal
 import           Data.Default.Class
 import           Data.Finite
+import           Data.Sequence                (Seq(..))
 import           Data.Void
 import           GHC.Generics                 (Generic)
 import           GHC.TypeNats
 import           Numeric.EMD.Internal.Extrema
-import           Numeric.EMD.Internal.Pipe
 import           Numeric.EMD.Internal.Spline
 import qualified Data.Binary                  as Bi
+import qualified Data.Conduino.Combinators    as C
 import qualified Data.Map                     as M
 import qualified Data.Vector.Generic          as VG
 import qualified Data.Vector.Generic.Sized    as SVG
 
 -- | Options for EMD composition.
-data EMDOpts a = EO { eoSiftCondition   :: SiftCondition a  -- ^ stop condition for sifting
-                    , eoSplineEnd       :: SplineEnd a      -- ^ end conditions for envelope splines
-                    , eoBoundaryHandler :: Maybe BoundaryHandler  -- ^ process for handling boundary
-                    }
-  deriving (Show, Eq, Ord, Generic)
+data EMDOpts v n a = EO
+    { eoSifter          :: Sifter v n a           -- ^ stop condition for sifting
+    , eoSplineEnd       :: SplineEnd a            -- ^ end conditions for envelope splines
+    , eoBoundaryHandler :: Maybe BoundaryHandler  -- ^ process for handling boundary
+    }
+  deriving (Generic)
 
--- | @since 0.1.3.0
-instance Bi.Binary a => Bi.Binary (EMDOpts a)
+-- -- | @since 0.1.3.0
+-- instance Bi.Binary a => Bi.Binary (EMDOpts a)
 
 -- | Default 'EMDOpts'
-defaultEO :: Fractional a => EMDOpts a
-defaultEO = EO { eoSiftCondition   = defaultSC
+defaultEO :: (VG.Vector v a, Fractional a, Ord a) => EMDOpts v n a
+defaultEO = EO { eoSifter          = defaultSifter
                , eoSplineEnd       = SENatural
                , eoBoundaryHandler = Just BHSymmetric
                }
 
 -- | @since 0.1.3.0
-instance Fractional a => Default (EMDOpts a) where
+instance (VG.Vector v a, Fractional a, Ord a) => Default (EMDOpts v n a) where
     def = defaultEO
 
 
@@ -72,89 +93,26 @@ data BoundaryHandler
 -- | @since 0.1.3.0
 instance Bi.Binary BoundaryHandler
 
--- | Stop conditions for sifting process
---
--- Data type is lazy in its fields, so this infinite data type:
---
--- @
--- nTimes n = SCTimes n `SCOr` nTimes (n + 1)
--- @
---
--- will be treated identically as:
---
--- @
--- nTimes = SCTimes
--- @
-data SiftCondition a
-    -- | Stop using standard SD method
-    = SCStdDev !a
-    -- | When the difference between successive items reaches a given threshold
-    -- \(\tau\)
-    --
-    -- \[
-    -- \frac{\left(f(t-1) - f(t)\right)^2}{f^2(t-1)} < \tau
-    -- \]
-    --
-    -- @since 0.1.10.0
-    | SCCauchy SiftProjection !a
-    -- | When the value reaches a given threshold \(\tau\)
-    --
-    -- \[
-    -- f(t) < \tau
-    -- \]
-    --
-    -- @since 0.1.10.0
-    | SCProj   SiftProjection !a
-    -- | S-condition criteria.
-    --
-    -- The S-number is the length of current streak where number of extrema
-    -- or zero crossings all differ at most by one.
-    --
-    -- Stop sifting when the S-number reaches a given amount.
-    --
-    -- @since 0.1.10.0
-    | SCSCond !Int
-    -- | Stop after a fixed number of sifting iterations
-    | SCTimes !Int
-    -- | One or the other
-    | SCOr (SiftCondition a) (SiftCondition a)
-    -- | Stop when both conditions are met
-    | SCAnd (SiftCondition a) (SiftCondition a)
-  deriving (Show, Eq, Ord, Generic)
-
--- | A projection of sifting data.  Used as a part of 'SiftCondition' to
--- describe 'SCCauchy' and 'SCProj'.
---
--- @since 0.1.10.0
-data SiftProjection
-    -- | The root mean square of the envelope means
-    = SPEnvMeanSum
-    -- | The "energy difference" quotient (Cheng, Yu, Yang 2005)
-    | SPEnergyDiff
-  deriving (Show, Eq, Ord, Generic)
-
-instance Bi.Binary SiftProjection
-
 -- | @since 0.1.3.0
-instance Bi.Binary a => Bi.Binary (SiftCondition a)
+instance (VG.Vector v a, Fractional a, Ord a) => Default (Sifter v n a) where
+    def = defaultSifter
 
--- | @since 0.1.3.0
-instance Fractional a => Default (SiftCondition a) where
-    def = defaultSC
-
--- | Default 'SiftCondition'
-defaultSC :: Fractional a => SiftCondition a
-defaultSC = SCStdDev 0.3 `SCOr` SCTimes 50     -- R package uses SCTimes 20, Matlab uses no limit
+-- | Default 'Sifter'
+defaultSifter :: (VG.Vector v a, Fractional a, Ord a) => Sifter v n a
+defaultSifter = siftStdDev 0.3 `siftOr` siftTimes 50
+    -- SCStdDev 0.3 `SCOr` SCTimes 50     -- R package uses SCTimes 20, Matlab uses no limit
 
 
 -- | Cheng, Yu, Yang suggest pairing together an energy difference
 -- threshold with a threshold for mean envelope RMS.  This is a convenience
 -- function to construct that pairing.
-scEnergyDiff
-    :: a                -- ^ Threshold for Energy Difference
+siftEnergyDiff
+    :: (VG.Vector v a, KnownNat n, Floating a, Ord a)
+    => a                -- ^ Threshold for Energy Difference
     -> a                -- ^ Threshold for mean envelope RMS
-    -> SiftCondition a
-scEnergyDiff s t = SCProj SPEnergyDiff s `SCAnd` SCProj SPEnvMeanSum t
+    -> Sifter v n a
+siftEnergyDiff s t = siftProj energyDiff s
+           `siftAnd` siftProj envMean t
 
 
 -- | The result of a sifting operation.  Each sift either yields
@@ -164,58 +122,109 @@ data SiftResult v n a = SRResidual !(SVG.Vector v n a)
 
 -- | Result of a single sift
 data SingleSift v n a = SingleSift
-    { ssRes    :: !(SVG.Vector v n a)
+    { ssResult :: !(SVG.Vector v n a)
     , ssMinEnv :: !(SVG.Vector v n a)
     , ssMaxEnv :: !(SVG.Vector v n a)
     }
 
-type Sifter v n m a = Pipe (SingleSift v n a) Void Void m ()
+-- | Monad where 'Sifter' actions live.  The reader parameter is the
+-- "original vector".
+type SM v n a = Reader (SVG.Vector v n a)
 
-siftTimes :: Int -> Sifter v n m a
-siftTimes n = dropP (n - 1) >> void awaitSurely
+newtype Sifter v n a = Sifter { sPipe :: Pipe (SingleSift v n a) Void Void (SM v n a) () }
 
-siftProj :: (SingleSift v n a -> Bool) -> Sifter v n m a
-siftProj p = go
+-- | Create a sifter that stops after a given fixed number of sifts.
+--
+-- Useful to use alongside 'siftOr' to set an "upper limit" on the number
+-- of sifts.
+siftTimes :: Int -> Sifter v n a
+siftTimes n = Sifter $ C.drop (n - 1) >> void awaitSurely
+
+-- | Create a sifter that stops when some projection on 'SingleShift' is
+-- smaller than a given threshold.
+siftProj
+    :: Ord b
+    => (SingleSift v n a -> SM v n a b)     -- ^ projection
+    -> b                                    -- ^ threshold
+    -> Sifter v n a
+siftProj p t = siftProj_ $ fmap (<= t) . p
+
+-- | Create a sifter that stops based on some predicate on the initial
+-- vector and 'SingleSift' being 'True'.
+siftProj_ :: (SingleSift v n a -> SM v n a Bool) -> Sifter v n a
+siftProj_ p = Sifter go
   where
     go = do
       v <- awaitSurely
-      unless (p v) go
+      r <- lift $ p v
+      unless r go
 
-siftPairs :: (SingleSift v n a -> SingleSift v n a -> Bool) -> Sifter v n m a
-siftPairs p = go =<< awaitSurely
+-- | Create a sifter that stops when some projection on two consecutive
+-- 'SingleShift's is smaller than a given threshold.
+siftPairs
+    :: Ord b
+    => (SingleSift v n a -> SingleSift v n a -> SM v n a b)
+    -> b
+    -> Sifter v n a
+siftPairs p t = siftPairs_ $ \x y -> (<= t) <$> p x y
+
+-- | Create a sifter that stops based on some predicate on two consecutive
+-- 'SingleSift's being 'True'.
+siftPairs_
+    :: (SingleSift v n a -> SingleSift v n a -> SM v n a Bool)
+    -> Sifter v n a
+siftPairs_ p = Sifter $ go =<< awaitSurely
   where
     go s = do
       s' <- awaitSurely
-      unless (p s s') (go s')
+      r  <- lift $ p s s'
+      unless r (go s')
 
-siftStdDev :: forall v n m a. (VG.Vector v a, Fractional a, Ord a) => a -> Sifter v n m a
-siftStdDev t = siftPairs $ \(SingleSift v _ _) (SingleSift v' _ _) ->
+-- | Sift based on the "standard deviation test", outlined in original
+-- paper.
+siftStdDev
+    :: forall v n a. (VG.Vector v a, Fractional a, Ord a)
+    => a                -- ^ minimal threshold
+    -> Sifter v n a
+siftStdDev = siftPairs $ \(SingleSift v _ _) (SingleSift v' _ _) -> pure $
     SVG.sum (SVG.zipWith (\x x' -> (x-x')^(2::Int) / (x^(2::Int) + eps)) v v')
-      <= t
   where
     eps = 0.0000001
 
+-- | General class of "cauchy-like" sifters: Given a projection function
+-- from a 'SingleSift', stop as soon as successive projections become
+-- smaller than a given threshold, propertionally.
+--
+-- Given \(f(x_t)\), stop when:
+--
+-- \[
+--   \frac{(f(x_t) - f(x_{t-1}))^2}{f^2(x_{t-1})} < \delta
+-- \]
 siftCauchy
     :: (Fractional b, Ord b)
-    => (SingleSift v n a -> b)
-    -> b
-    -> Sifter v n m a
-siftCauchy p t = siftPairs $ \s s' ->
+    => (SingleSift v n a -> b)      -- ^ Projection function
+    -> b                            -- ^ Threshold \(\delta\)
+    -> Sifter v n a
+siftCauchy p = siftPairs $ \s s' ->
   let ps  = p s
       ps' = p s'
       δ   = ps' - ps
-  in  ((δ * δ) / (ps * ps)) <= t
+  in  pure $ (δ * δ) / (ps * ps)
 
-siftSCond :: (VG.Vector v a, KnownNat n, Fractional a, Ord a) => Int -> Sifter v (n + 1) m a
-siftSCond n = go []
+-- | Sift based on the "S-parameter" condition: Stop after a streak @n@ of
+-- almost-same numbers of zero crossings and turning points.
+siftSCond
+    :: (VG.Vector v a, KnownNat n, Fractional a, Ord a)
+    => Int                          -- ^ Streak @n@ to stop on
+    -> Sifter v (n + 1) a
+siftSCond n = Sifter $ C.map (crossCount . ssResult)
+                    .| C.consecutive n
+                    .| C.concatMap pick
+                    .| C.dropWhile notGood
   where
-    go cxs = do
-      v <- awaitSurely
-      let cx   = crossCount $ ssRes v
-          done = length cxs >= (n - 1)
-              && all ((<= 1) . abs . subtract cx) cxs
-      unless done $
-        go (take (n - 1) (cx : cxs))
+    pick Empty      = Nothing
+    pick (xs :|> x) = (xs, x) <$ guard (length xs == (n - 1))
+    notGood (xs, x) = all ((<= 1) . abs . subtract x) xs
     crossCount xs = M.size mins + M.size maxs + crosses
       where
         (mins, maxs) = extrema xs
@@ -228,67 +237,67 @@ siftSCond n = go []
                          | otherwise  -> i + 1
           in  (i', Just xPos)
 
-siftOr :: Monad m => Sifter v n m a -> Sifter v n m a -> Sifter v n m a
-siftOr p q = getZipSink $ ZipSink p <|> ZipSink q
+siftOr :: Sifter v n a -> Sifter v n a -> Sifter v n a
+siftOr (Sifter p) (Sifter q) = Sifter $ altSink p q
+infixr 2 `siftOr`
 
-siftAnd :: Monad m => Sifter v n m a -> Sifter v n m a -> Sifter v n m a
-siftAnd p q = getZipSink $ ZipSink p *> ZipSink q
+siftAnd :: Sifter v n a -> Sifter v n a -> Sifter v n a
+siftAnd (Sifter p) (Sifter q) = Sifter $ zipSink (id <$ p) q
+infixr 3 `siftAnd`
 
-toSifter
-    :: (VG.Vector v a, KnownNat n, Monad m, Floating a, Ord a)
-    => SVG.Vector v (n + 1) a
-    -> SiftCondition a
-    -> Sifter v (n + 1) m a
-toSifter v0 = go
-  where
-    go = \case
-      SCStdDev x   -> siftStdDev x
-      SCCauchy p x -> siftCauchy (toProj p v0) x
-      SCProj   p x -> siftProj ((<= x) . toProj p v0)
-      SCSCond  n   -> siftSCond n
-      SCTimes  i   -> siftTimes i
-      SCOr p q     -> siftOr (go p) (go q)
-      SCAnd p q    -> siftAnd (go p) (go q)
-
-toProj
+-- | Project the root mean square of the mean of the maximum and minimum
+-- envelopes.
+envMean
     :: (VG.Vector v a, KnownNat n, Floating a)
-    => SiftProjection
-    -> SVG.Vector v n a
-    -> SingleSift v n a
-    -> a
-toProj = \case
-    SPEnvMeanSum -> \v0 ->
-      let eX  = rms v0
-      in  \SingleSift{..} ->
-            let mrms = rms $ SVG.zipWith (\x y -> (x + y) / 2) ssMinEnv ssMaxEnv
-            in  sqrt $ mrms / eX
-    SPEnergyDiff -> \v0 ->
-      let eX  = rms v0
-          eX2 = eX * eX
-      in  \SingleSift{..} ->
-            let eTot  = rms ssRes - rms (SVG.zipWith (-) v0 ssRes)
-                eDiff = eX - eTot
-            in  sqrt $ (eDiff * eDiff) / eX2
-  where
-    rms xs = SVG.foldl' (\s x -> s + x*x) 0 xs / fromIntegral (SVG.length xs)
+    => SingleSift v n a
+    -> SM v n a a
+envMean SingleSift{..} = pure $
+    rms $ SVG.zipWith (\x y -> (x + y) / 2) ssMinEnv ssMaxEnv
+
+-- | Project the /square root/ of the "Energy difference".
+energyDiff
+    :: (VG.Vector v a, Floating a)
+    => SingleSift v n a
+    -> SM v n a a
+energyDiff SingleSift{..} = do
+    v0 <- ask
+    pure . sqrt . abs . SVG.sum
+         $ SVG.zipWith (\x c -> c * (x - c)) v0 ssResult
+
+-- | Given a "projection function" (like 'envMean' or 'energyDiff'),
+-- re-scale the result based on the RMS of the original signal.
+normalizeProj
+    :: (VG.Vector v a, KnownNat n, Floating a)
+    => (SingleSift v n a -> SM v n a a)
+    -> (SingleSift v n a -> SM v n a a)
+normalizeProj f ss = do
+    v0 <- asks rms
+    r  <- f ss
+    pure $ r / v0
+
+-- | Get the root mean square of a vector
+rms :: (VG.Vector v a, KnownNat n, Floating a) => SVG.Vector v n a -> a
+rms xs = sqrt $ SVG.foldl' (\s x -> s + x*x) 0 xs / fromIntegral (SVG.length xs)
 
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
 sift
     :: forall v n a. (VG.Vector v a, KnownNat n, Floating a, Ord a)
-    => EMDOpts a
+    => EMDOpts v (n + 1) a
     -> SVG.Vector v (n + 1) a
     -> SiftResult v (n + 1) a
 sift EO{..} v0 = case execStateT (runPipe sifterPipe) (0, v0) of
     Left  v        -> SRResidual v
     Right (!i, !v) -> SRIMF v i
   where
-    sifterPipe = repeatM go
-              .| toSifter v0 eoSiftCondition
+    sifterPipe = C.repeatM go
+              .| hoistPipe
+                    (pure . (`runReader` v0))
+                    (sPipe eoSifter)
     go = StateT $ \(!i, !v) ->
       case sift' eoSplineEnd eoBoundaryHandler v of
         Nothing                -> Left v
-        Just ss@SingleSift{..} -> Right (ss, (i + 1, ssRes))
+        Just ss@SingleSift{..} -> Right (ss, (i + 1, ssResult))
 
 -- | Single sift
 sift'
@@ -300,7 +309,7 @@ sift'
 sift' se bh v = do
     (mins, maxs) <- envelopes se bh v
     pure SingleSift
-      { ssRes    = SVG.zipWith3 (\x mi ma -> x - (mi + ma)/2) v mins maxs
+      { ssResult = SVG.zipWith3 (\x mi ma -> x - (mi + ma)/2) v mins maxs
       , ssMinEnv = mins
       , ssMaxEnv = maxs
       }

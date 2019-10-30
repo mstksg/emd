@@ -43,7 +43,7 @@ module Numeric.HHT (
   , expectedFreq, dominantFreq
   , foldFreq
   -- ** Options
-  , EMDOpts(..), defaultEO, BoundaryHandler(..), SiftCondition(..), defaultSC, SplineEnd(..)
+  , EMDOpts(..), defaultEO, BoundaryHandler(..), defaultSifter, SplineEnd(..)
   -- * Hilbert transforms (internal usage)
   , hilbert
   , hilbertIm
@@ -125,7 +125,7 @@ instance (NFData (v a), NFData a) => NFData (HHT v n a)
 -- Essentially is a composition of 'hhtEmd' and 'emd'.  See 'hhtEmd' for
 -- a more flexible version.
 hht :: forall v n a. (VG.Vector v a, VG.Vector v (Complex a), KnownNat n, FFT.FFTWReal a)
-    => EMDOpts a
+    => EMDOpts v (n + 1) a
     -> SVG.Vector v (n + 1) a
     -> HHT v n a
 hht eo = hhtEmd . emd eo
