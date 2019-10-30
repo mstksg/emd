@@ -7,7 +7,7 @@
 --   Empirical Mode decomposition and Hilbert-Huang Transform in pure
 --   Haskell.
 @package emd
-@version 0.1.10.0
+@version 0.2.0.0
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -48,6 +48,130 @@ instance GHC.Show.Show a => GHC.Show.Show (Numeric.EMD.Internal.Spline.SplineEnd
 instance Data.Binary.Class.Binary a => Data.Binary.Class.Binary (Numeric.EMD.Internal.Spline.SplineEnd a)
 
 
+-- | Tools for creating your own custom sift stopping conditions.
+module Numeric.EMD.Sift
+
+-- | A sift stopping condition.
+--   
+--   It is a <a>Pipe</a> consumer that takes single sift step results
+--   upstream and terminates with <tt>()</tt> as soon as it is satisfied
+--   with the latest sift step.
+--   
+--   Use combinators like <tt>siftOr</tt> and <tt>siftAnd</tt> to combine
+--   sifters, and the various sifters in <a>Numeric.EMD.Sift</a> to create
+--   sifters from commonly established ones or new ones from scratch.
+newtype Sifter v n a
+Sifter :: Pipe (SingleSift v n a) Void Void (SM v n a) () -> Sifter v n a
+[sPipe] :: Sifter v n a -> Pipe (SingleSift v n a) Void Void (SM v n a) ()
+
+-- | The result of a sifting operation. Each sift either yields a residual,
+--   or a new IMF.
+data SiftResult v n a
+SRResidual :: !Vector v n a -> SiftResult v n a
+
+-- | number of sifting iterations
+SRIMF :: !Vector v n a -> !Int -> SiftResult v n a
+
+-- | Result of a single sift
+data SingleSift v n a
+SingleSift :: !Vector v n a -> !Vector v n a -> !Vector v n a -> SingleSift v n a
+[ssResult] :: SingleSift v n a -> !Vector v n a
+[ssMinEnv] :: SingleSift v n a -> !Vector v n a
+[ssMaxEnv] :: SingleSift v n a -> !Vector v n a
+
+-- | Monad where <a>Sifter</a> actions live. The reader parameter is the
+--   "original vector".
+type SM v n a = Reader (Vector v n a)
+
+-- | Default <a>Sifter</a>
+--   
+--   <pre>
+--   defaultSifter = <a>siftStdDev</a> 0.3 <a>siftOr</a> <a>siftTimes</a> 50
+--   </pre>
+--   
+--   R package uses <tt><a>siftTimes</a> 20</tt>, Matlab uses no limit
+defaultSifter :: (Vector v a, Fractional a, Ord a) => Sifter v n a
+
+-- | Sift based on the "standard deviation test", outlined in original
+--   paper.
+siftStdDev :: forall v n a. (Vector v a, Fractional a, Ord a) => a -> Sifter v n a
+
+-- | Create a sifter that stops after a given fixed number of sifts.
+--   
+--   Useful to use alongside <a>siftOr</a> to set an "upper limit" on the
+--   number of sifts.
+siftTimes :: Int -> Sifter v n a
+
+-- | Cheng, Yu, Yang suggest pairing together an energy difference
+--   threshold with a threshold for mean envelope RMS. This is a
+--   convenience function to construct that pairing.
+siftEnergyDiff :: (Vector v a, KnownNat n, Floating a, Ord a) => a -> a -> Sifter v n a
+
+-- | Sift based on the "S-parameter" condition: Stop after a streak
+--   <tt>n</tt> of almost-same numbers of zero crossings and turning
+--   points.
+siftSCond :: (Vector v a, KnownNat n, Fractional a, Ord a) => Int -> Sifter v (n + 1) a
+
+-- | Combine two sifters in "and" fashion: The final sifter will complete
+--   when <i>both</i> sifters complete.
+siftAnd :: Sifter v n a -> Sifter v n a -> Sifter v n a
+infixr 3 `siftAnd`
+
+-- | Combine two sifters in "or" fashion: The final sifter will complete
+--   when <i>either</i> sifter completes.
+siftOr :: Sifter v n a -> Sifter v n a -> Sifter v n a
+infixr 2 `siftOr`
+
+-- | Project the root mean square of the mean of the maximum and minimum
+--   envelopes.
+envMean :: (Vector v a, KnownNat n, Floating a) => SingleSift v n a -> SM v n a a
+
+-- | Project the <i>square root</i> of the "Energy difference".
+energyDiff :: (Vector v a, Floating a) => SingleSift v n a -> SM v n a a
+
+-- | Given a "projection function" (like <a>envMean</a> or
+--   <a>energyDiff</a>), re-scale the result based on the RMS of the
+--   original signal.
+normalizeProj :: (Vector v a, KnownNat n, Floating a) => (SingleSift v n a -> SM v n a a) -> SingleSift v n a -> SM v n a a
+
+-- | General class of "cauchy-like" sifters: Given a projection function
+--   from a <a>SingleSift</a>, stop as soon as successive projections
+--   become smaller than a given threshold, propertionally.
+--   
+--   Given &lt;math&gt;, stop when:
+--   
+--   &lt;math&gt;
+siftCauchy :: (Fractional b, Ord b) => (SingleSift v n a -> b) -> b -> Sifter v n a
+
+-- | Create a sifter that stops when some projection on two consecutive
+--   <a>SingleSift</a>s is smaller than a given threshold.
+siftPairs :: Ord b => (SingleSift v n a -> SingleSift v n a -> SM v n a b) -> b -> Sifter v n a
+
+-- | Create a sifter that stops when some projection on <a>SingleSift</a>
+--   is smaller than a given threshold.
+siftProj :: Ord b => (SingleSift v n a -> SM v n a b) -> b -> Sifter v n a
+
+-- | Create a sifter that stops based on some predicate on two consecutive
+--   <a>SingleSift</a>s being <a>True</a>.
+siftPairs_ :: (SingleSift v n a -> SingleSift v n a -> SM v n a Bool) -> Sifter v n a
+
+-- | Create a sifter that stops based on some predicate on the initial
+--   vector and <a>SingleSift</a> being <a>True</a>.
+siftProj_ :: (SingleSift v n a -> SM v n a Bool) -> Sifter v n a
+
+-- | Iterated sifting process, used to produce either an IMF or a residual.
+sift :: forall v n a. (Vector v a, KnownNat n, Floating a, Ord a) => EMDOpts v (n + 1) a -> Vector v (n + 1) a -> SiftResult v (n + 1) a
+
+-- | Returns cubic splines of local minimums and maximums. Returns
+--   <a>Nothing</a> if there are not enough local minimum or maximums to
+--   create the splines.
+envelopes :: (Vector v a, KnownNat n, Fractional a, Ord a) => SplineEnd a -> Maybe BoundaryHandler -> Vector v (n + 1) a -> Maybe (Vector v (n + 1) a, Vector v (n + 1) a)
+
+-- | Get the root mean square of a vector
+rms :: (Vector v a, KnownNat n, Floating a) => Vector v n a -> a
+instance (Data.Vector.Generic.Base.Vector v a, GHC.Real.Fractional a, GHC.Classes.Ord a) => Data.Default.Class.Default (Numeric.EMD.Internal.Sifter v n a)
+
+
 -- | Empirical Mode Decomposition in pure Haskell.
 --   
 --   Main interface is <a>emd</a>, with <a>defaultEO</a>. A tracing version
@@ -79,14 +203,14 @@ module Numeric.EMD
 --   length as the input vector</li>
 --   <li>We provide a vector of size of at least one.</li>
 --   </ol>
-emd :: (Vector v a, KnownNat n, Floating a, Ord a) => EMDOpts a -> Vector v (n + 1) a -> EMD v (n + 1) a
+emd :: (Vector v a, KnownNat n, Floating a, Ord a) => EMDOpts v (n + 1) a -> Vector v (n + 1) a -> EMD v (n + 1) a
 
 -- | <a>emd</a>, but tracing results to stdout as IMFs are found. Useful
 --   for debugging to see how long each step is taking.
-emdTrace :: (Vector v a, KnownNat n, Floating a, Ord a, MonadIO m) => EMDOpts a -> Vector v (n + 1) a -> m (EMD v (n + 1) a)
+emdTrace :: (Vector v a, KnownNat n, Floating a, Ord a, MonadIO m) => EMDOpts v (n + 1) a -> Vector v (n + 1) a -> m (EMD v (n + 1) a)
 
 -- | <a>emd</a> with a callback for each found IMF.
-emd' :: (Vector v a, KnownNat n, Floating a, Ord a, Applicative m) => (SiftResult v (n + 1) a -> m r) -> EMDOpts a -> Vector v (n + 1) a -> m (EMD v (n + 1) a)
+emd' :: (Vector v a, KnownNat n, Floating a, Ord a, Applicative m) => (SiftResult v (n + 1) a -> m r) -> EMDOpts v (n + 1) a -> Vector v (n + 1) a -> m (EMD v (n + 1) a)
 
 -- | Collapse an <a>EMD</a> back into its original time series. Should be a
 --   left-inverse to <a>emd</a>: using <a>iemd</a> on the result of
@@ -105,20 +229,30 @@ EMD :: ![Vector v n a] -> !Vector v n a -> EMD v n a
 [emdResidual] :: EMD v n a -> !Vector v n a
 
 -- | Options for EMD composition.
-data EMDOpts a
-EO :: SiftCondition a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts a
+data EMDOpts v n a
+EO :: Sifter v n a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts v n a
 
 -- | stop condition for sifting
-[eoSiftCondition] :: EMDOpts a -> SiftCondition a
+[eoSifter] :: EMDOpts v n a -> Sifter v n a
 
 -- | end conditions for envelope splines
-[eoSplineEnd] :: EMDOpts a -> SplineEnd a
+[eoSplineEnd] :: EMDOpts v n a -> SplineEnd a
 
 -- | process for handling boundary
-[eoBoundaryHandler] :: EMDOpts a -> Maybe BoundaryHandler
+[eoBoundaryHandler] :: EMDOpts v n a -> Maybe BoundaryHandler
 
 -- | Default <a>EMDOpts</a>
-defaultEO :: Fractional a => EMDOpts a
+--   
+--   Note: If you immediately use this and set <a>eoSifter</a>, then
+--   <tt>v</tt> will be ambiguous. Explicitly set <tt>v</tt> with type
+--   applications to appease GHC
+--   
+--   <pre>
+--   <a>defaultEO</a> @(Data.Vector.Vector)
+--      { eoSifter = scTimes 100
+--      }
+--   </pre>
+defaultEO :: (Vector v a, Fractional a, Ord a) => EMDOpts v n a
 
 -- | Boundary conditions for splines.
 data BoundaryHandler
@@ -129,69 +263,25 @@ BHClamp :: BoundaryHandler
 -- | Extend boundaries symmetrically
 BHSymmetric :: BoundaryHandler
 
--- | Stop conditions for sifting process
+-- | A sift stopping condition.
 --   
---   Data type is lazy in its fields, so this infinite data type:
+--   It is a <a>Pipe</a> consumer that takes single sift step results
+--   upstream and terminates with <tt>()</tt> as soon as it is satisfied
+--   with the latest sift step.
+--   
+--   Use combinators like <tt>siftOr</tt> and <tt>siftAnd</tt> to combine
+--   sifters, and the various sifters in <a>Numeric.EMD.Sift</a> to create
+--   sifters from commonly established ones or new ones from scratch.
+data Sifter v n a
+
+-- | Default <a>Sifter</a>
 --   
 --   <pre>
---   nTimes n = SCTimes n <a>SCOr</a> nTimes (n + 1)
+--   defaultSifter = <a>siftStdDev</a> 0.3 <a>siftOr</a> <a>siftTimes</a> 50
 --   </pre>
 --   
---   will be treated identically as:
---   
---   <pre>
---   nTimes = SCTimes
---   </pre>
-data SiftCondition a
-
--- | Stop using standard SD method
-SCStdDev :: !a -> SiftCondition a
-
--- | When the difference between successive items reaches a given threshold
---   &lt;math&gt;
---   
---   &lt;math&gt;
-SCCauchy :: SiftProjection -> !a -> SiftCondition a
-
--- | When the value reaches a given threshold &lt;math&gt;
---   
---   &lt;math&gt;
-SCProj :: SiftProjection -> !a -> SiftCondition a
-
--- | S-condition criteria.
---   
---   The S-number is the length of current streak where number of extrema
---   or zero crossings all differ at most by one.
---   
---   Stop sifting when the S-number reaches a given amount.
-SCSCond :: !Int -> SiftCondition a
-
--- | Stop after a fixed number of sifting iterations
-SCTimes :: !Int -> SiftCondition a
-
--- | One or the other
-SCOr :: SiftCondition a -> SiftCondition a -> SiftCondition a
-
--- | Stop when both conditions are met
-SCAnd :: SiftCondition a -> SiftCondition a -> SiftCondition a
-
--- | A projection of sifting data. Used as a part of <a>SiftCondition</a>
---   to describe <a>SCCauchy</a> and <a>SCProj</a>.
-data SiftProjection
-
--- | The root mean square of the envelope means
-SPEnvMeanSum :: SiftProjection
-
--- | The "energy difference" quotient (Cheng, Yu, Yang 2005)
-SPEnergyDiff :: SiftProjection
-
--- | Default <a>SiftCondition</a>
-defaultSC :: Fractional a => SiftCondition a
-
--- | Cheng, Yu, Yang suggest pairing together an energy difference
---   threshold with a threshold for mean envelope RMS. This is a
---   convenience function to construct that pairing.
-scEnergyDiff :: a -> a -> SiftCondition a
+--   R package uses <tt><a>siftTimes</a> 20</tt>, Matlab uses no limit
+defaultSifter :: (Vector v a, Fractional a, Ord a) => Sifter v n a
 
 -- | End condition for spline
 data SplineEnd a
@@ -208,7 +298,7 @@ SENatural :: SplineEnd a
 SEClamped :: a -> a -> SplineEnd a
 
 -- | Iterated sifting process, used to produce either an IMF or a residual.
-sift :: forall v n a. (Vector v a, KnownNat n, Floating a, Ord a) => EMDOpts a -> Vector v (n + 1) a -> SiftResult v (n + 1) a
+sift :: forall v n a. (Vector v a, KnownNat n, Floating a, Ord a) => EMDOpts v (n + 1) a -> Vector v (n + 1) a -> SiftResult v (n + 1) a
 
 -- | The result of a sifting operation. Each sift either yields a residual,
 --   or a new IMF.
@@ -228,6 +318,7 @@ instance GHC.Generics.Generic (Numeric.EMD.EMD v n a)
 instance GHC.Show.Show (v a) => GHC.Show.Show (Numeric.EMD.EMD v n a)
 instance Control.DeepSeq.NFData (v a) => Control.DeepSeq.NFData (Numeric.EMD.EMD v n a)
 instance (Data.Vector.Generic.Base.Vector v a, GHC.TypeNats.KnownNat n, Data.Binary.Class.Binary (v a)) => Data.Binary.Class.Binary (Numeric.EMD.EMD v n a)
+instance (Data.Vector.Generic.Base.Vector v a, GHC.Real.Fractional a, GHC.Classes.Ord a) => Data.Default.Class.Default (Numeric.EMD.Internal.EMDOpts v n a)
 
 
 -- | Hilbert-Huang transform in pure Haskell.
@@ -284,7 +375,7 @@ hhtEmd :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal 
 -- | Directly compute the Hilbert-Huang transform of a given time series.
 --   Essentially is a composition of <a>hhtEmd</a> and <a>emd</a>. See
 --   <a>hhtEmd</a> for a more flexible version.
-hht :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => EMDOpts a -> Vector v (n + 1) a -> HHT v n a
+hht :: forall v n a. (Vector v a, Vector v (Complex a), KnownNat n, FFTWReal a) => EMDOpts v (n + 1) a -> Vector v (n + 1) a -> HHT v n a
 
 -- | Invert a Hilbert-Huang transform back to an Empirical Mode
 --   Decomposition
@@ -361,20 +452,30 @@ dominantFreq :: forall v n a. (Vector v a, KnownNat n, Ord a) => HHT v n a -> Ve
 foldFreq :: forall v u n a b c. (Vector v a, Vector u c, KnownNat n, Monoid b) => (a -> a -> b) -> (b -> c) -> HHT v n a -> Vector u n c
 
 -- | Options for EMD composition.
-data EMDOpts a
-EO :: SiftCondition a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts a
+data EMDOpts v n a
+EO :: Sifter v n a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts v n a
 
 -- | stop condition for sifting
-[eoSiftCondition] :: EMDOpts a -> SiftCondition a
+[eoSifter] :: EMDOpts v n a -> Sifter v n a
 
 -- | end conditions for envelope splines
-[eoSplineEnd] :: EMDOpts a -> SplineEnd a
+[eoSplineEnd] :: EMDOpts v n a -> SplineEnd a
 
 -- | process for handling boundary
-[eoBoundaryHandler] :: EMDOpts a -> Maybe BoundaryHandler
+[eoBoundaryHandler] :: EMDOpts v n a -> Maybe BoundaryHandler
 
 -- | Default <a>EMDOpts</a>
-defaultEO :: Fractional a => EMDOpts a
+--   
+--   Note: If you immediately use this and set <a>eoSifter</a>, then
+--   <tt>v</tt> will be ambiguous. Explicitly set <tt>v</tt> with type
+--   applications to appease GHC
+--   
+--   <pre>
+--   <a>defaultEO</a> @(Data.Vector.Vector)
+--      { eoSifter = scTimes 100
+--      }
+--   </pre>
+defaultEO :: (Vector v a, Fractional a, Ord a) => EMDOpts v n a
 
 -- | Boundary conditions for splines.
 data BoundaryHandler
@@ -385,54 +486,14 @@ BHClamp :: BoundaryHandler
 -- | Extend boundaries symmetrically
 BHSymmetric :: BoundaryHandler
 
--- | Stop conditions for sifting process
---   
---   Data type is lazy in its fields, so this infinite data type:
+-- | Default <a>Sifter</a>
 --   
 --   <pre>
---   nTimes n = SCTimes n <a>SCOr</a> nTimes (n + 1)
+--   defaultSifter = <a>siftStdDev</a> 0.3 <a>siftOr</a> <a>siftTimes</a> 50
 --   </pre>
 --   
---   will be treated identically as:
---   
---   <pre>
---   nTimes = SCTimes
---   </pre>
-data SiftCondition a
-
--- | Stop using standard SD method
-SCStdDev :: !a -> SiftCondition a
-
--- | When the difference between successive items reaches a given threshold
---   &lt;math&gt;
---   
---   &lt;math&gt;
-SCCauchy :: SiftProjection -> !a -> SiftCondition a
-
--- | When the value reaches a given threshold &lt;math&gt;
---   
---   &lt;math&gt;
-SCProj :: SiftProjection -> !a -> SiftCondition a
-
--- | S-condition criteria.
---   
---   The S-number is the length of current streak where number of extrema
---   or zero crossings all differ at most by one.
---   
---   Stop sifting when the S-number reaches a given amount.
-SCSCond :: !Int -> SiftCondition a
-
--- | Stop after a fixed number of sifting iterations
-SCTimes :: !Int -> SiftCondition a
-
--- | One or the other
-SCOr :: SiftCondition a -> SiftCondition a -> SiftCondition a
-
--- | Stop when both conditions are met
-SCAnd :: SiftCondition a -> SiftCondition a -> SiftCondition a
-
--- | Default <a>SiftCondition</a>
-defaultSC :: Fractional a => SiftCondition a
+--   R package uses <tt><a>siftTimes</a> 20</tt>, Matlab uses no limit
+defaultSifter :: (Vector v a, Fractional a, Ord a) => Sifter v n a
 
 -- | End condition for spline
 data SplineEnd a
