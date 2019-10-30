@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns                             #-}
-{-# LANGUAGE DeriveGeneric                            #-}
 {-# LANGUAGE GADTs                                    #-}
 {-# LANGUAGE LambdaCase                               #-}
 {-# LANGUAGE RankNTypes                               #-}
@@ -8,14 +7,24 @@
 {-# LANGUAGE TypeApplications                         #-}
 {-# LANGUAGE TypeInType                               #-}
 {-# LANGUAGE TypeOperators                            #-}
+{-# OPTIONS_GHC -Wno-orphans                          #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
-
-module Numeric.EMD.Internal.Sift (
-    EMDOpts(..), defaultEO
-  , BoundaryHandler(..)
-  , SplineEnd(..)
+-- |
+-- Module      : Numeric.EMD.Sift
+-- Copyright   : (c) Justin Le 2019
+-- License     : BSD3
+--
+-- Maintainer  : justin@jle.im
+-- Stability   : experimental
+-- Portability : non-portable
+--
+-- Tools for creating your own custom sift stopping conditions.
+--
+-- @since 0.2.0.0
+module Numeric.EMD.Sift (
+    Sifter(..), SiftResult(..), SingleSift(..), SM
   -- * Sifters
   , defaultSifter
   , siftStdDev
@@ -34,9 +43,7 @@ module Numeric.EMD.Internal.Sift (
   , siftPairs_
   , siftProj_
   -- * Internal
-  , sift, SiftResult(..)
-  , envelopes
-  , rms
+  , sift, envelopes, rms
   ) where
 
 import           Control.Monad
@@ -48,60 +55,28 @@ import           Data.Conduino.Internal
 import           Data.Default.Class
 import           Data.Finite
 import           Data.Sequence                (Seq(..))
-import           Data.Void
-import           GHC.Generics                 (Generic)
 import           GHC.TypeNats
+import           Numeric.EMD.Internal
 import           Numeric.EMD.Internal.Extrema
 import           Numeric.EMD.Internal.Spline
-import qualified Data.Binary                  as Bi
 import qualified Data.Conduino.Combinators    as C
 import qualified Data.Map                     as M
 import qualified Data.Vector.Generic          as VG
 import qualified Data.Vector.Generic.Sized    as SVG
-
--- | Options for EMD composition.
-data EMDOpts v n a = EO
-    { eoSifter          :: Sifter v n a           -- ^ stop condition for sifting
-    , eoSplineEnd       :: SplineEnd a            -- ^ end conditions for envelope splines
-    , eoBoundaryHandler :: Maybe BoundaryHandler  -- ^ process for handling boundary
-    }
-  deriving (Generic)
-
--- -- | @since 0.1.3.0
--- instance Bi.Binary a => Bi.Binary (EMDOpts a)
-
--- | Default 'EMDOpts'
-defaultEO :: (VG.Vector v a, Fractional a, Ord a) => EMDOpts v n a
-defaultEO = EO { eoSifter          = defaultSifter
-               , eoSplineEnd       = SENatural
-               , eoBoundaryHandler = Just BHSymmetric
-               }
-
--- | @since 0.1.3.0
-instance (VG.Vector v a, Fractional a, Ord a) => Default (EMDOpts v n a) where
-    def = defaultEO
-
-
--- | Boundary conditions for splines.
-data BoundaryHandler
-    -- | Clamp envelope at end points (Matlab implementation)
-    = BHClamp
-    -- | Extend boundaries symmetrically
-    | BHSymmetric
-  deriving (Show, Eq, Ord, Generic)
-
--- | @since 0.1.3.0
-instance Bi.Binary BoundaryHandler
 
 -- | @since 0.1.3.0
 instance (VG.Vector v a, Fractional a, Ord a) => Default (Sifter v n a) where
     def = defaultSifter
 
 -- | Default 'Sifter'
+--
+-- @
+-- defaultSifter = 'siftStdDev' 0.3 `siftOr` 'siftTimes' 50
+-- @
+--
+-- R package uses @'siftTimes' 20@, Matlab uses no limit
 defaultSifter :: (VG.Vector v a, Fractional a, Ord a) => Sifter v n a
 defaultSifter = siftStdDev 0.3 `siftOr` siftTimes 50
-    -- SCStdDev 0.3 `SCOr` SCTimes 50     -- R package uses SCTimes 20, Matlab uses no limit
-
 
 -- | Cheng, Yu, Yang suggest pairing together an energy difference
 -- threshold with a threshold for mean envelope RMS.  This is a convenience
@@ -120,19 +95,6 @@ siftEnergyDiff s t = siftProj energyDiff s
 data SiftResult v n a = SRResidual !(SVG.Vector v n a)
                       | SRIMF      !(SVG.Vector v n a) !Int   -- ^ number of sifting iterations
 
--- | Result of a single sift
-data SingleSift v n a = SingleSift
-    { ssResult :: !(SVG.Vector v n a)
-    , ssMinEnv :: !(SVG.Vector v n a)
-    , ssMaxEnv :: !(SVG.Vector v n a)
-    }
-
--- | Monad where 'Sifter' actions live.  The reader parameter is the
--- "original vector".
-type SM v n a = Reader (SVG.Vector v n a)
-
-newtype Sifter v n a = Sifter { sPipe :: Pipe (SingleSift v n a) Void Void (SM v n a) () }
-
 -- | Create a sifter that stops after a given fixed number of sifts.
 --
 -- Useful to use alongside 'siftOr' to set an "upper limit" on the number
@@ -140,7 +102,7 @@ newtype Sifter v n a = Sifter { sPipe :: Pipe (SingleSift v n a) Void Void (SM v
 siftTimes :: Int -> Sifter v n a
 siftTimes n = Sifter $ C.drop (n - 1) >> void awaitSurely
 
--- | Create a sifter that stops when some projection on 'SingleShift' is
+-- | Create a sifter that stops when some projection on 'SingleSift' is
 -- smaller than a given threshold.
 siftProj
     :: Ord b
@@ -160,7 +122,7 @@ siftProj_ p = Sifter go
       unless r go
 
 -- | Create a sifter that stops when some projection on two consecutive
--- 'SingleShift's is smaller than a given threshold.
+-- 'SingleSift's is smaller than a given threshold.
 siftPairs
     :: Ord b
     => (SingleSift v n a -> SingleSift v n a -> SM v n a b)
@@ -237,10 +199,14 @@ siftSCond n = Sifter $ C.map (crossCount . ssResult)
                          | otherwise  -> i + 1
           in  (i', Just xPos)
 
+-- | Combine two sifters in "or" fashion: The final sifter will complete
+-- when /either/ sifter completes.
 siftOr :: Sifter v n a -> Sifter v n a -> Sifter v n a
 siftOr (Sifter p) (Sifter q) = Sifter $ altSink p q
 infixr 2 `siftOr`
 
+-- | Combine two sifters in "and" fashion: The final sifter will complete
+-- when /both/ sifters complete.
 siftAnd :: Sifter v n a -> Sifter v n a -> Sifter v n a
 siftAnd (Sifter p) (Sifter q) = Sifter $ zipSink (id <$ p) q
 infixr 3 `siftAnd`

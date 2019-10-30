@@ -1,5 +1,5 @@
 name:                emd
-version:             0.1.10.0
+version:             0.2.0.0
 github:              "mstksg/emd"
 license:             BSD3
 author:              "Justin Le"
@@ -34,9 +34,9 @@ ghc-options:
 library:
   source-dirs: src
   other-modules:
+  - Numeric.EMD.Internal
   - Numeric.EMD.Internal.Extrema
   - Numeric.EMD.Internal.Pipe
-  - Numeric.EMD.Internal.Sift
   - Numeric.EMD.Internal.Tridiagonal
   - Numeric.HHT.Internal.FFT
   dependencies:
@@ -70,14 +70,15 @@ tests:
     - containers
     - emd
     - ghc-typelits-knownnat
-    - hedgehog
     - ghc-typelits-natnormalise
-    - typelits-witnesses
+    - hedgehog
     - statistics
     - tasty
-    - vector-sized
     - tasty-hedgehog
     - tasty-hunit
+    - typelits-witnesses
+    - vector
+    - vector-sized
 
 benchmarks:
   emd-bench:

@@ -12,7 +12,7 @@
 
 -- |
 -- Module      : Numeric.EMD.Internal.Spline
--- Copyright   : (c) Justin Le 2018
+-- Copyright   : (c) Justin Le 2019
 -- License     : BSD3
 --
 -- Maintainer  : justin@jle.im

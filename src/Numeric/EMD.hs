@@ -8,12 +8,13 @@
 {-# LANGUAGE TypeApplications                         #-}
 {-# LANGUAGE TypeInType                               #-}
 {-# LANGUAGE TypeOperators                            #-}
+{-# OPTIONS_GHC -Wno-orphans                          #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
 -- |
 -- Module      : Numeric.EMD
--- Copyright   : (c) Justin Le 2018
+-- Copyright   : (c) Justin Le 2019
 -- License     : BSD3
 --
 -- Maintainer  : justin@jle.im
@@ -38,7 +39,6 @@
 -- 'Data.Vector.Sized.toSized' (for when you know the size at compile-time)
 -- and 'Data.Vector.Sized.withSized' (for when you don't).
 --
-
 module Numeric.EMD (
   -- * Empirical Mode Decomposition
     emd
@@ -49,6 +49,7 @@ module Numeric.EMD (
   -- ** Configuration
   , EMDOpts(..), defaultEO
   , BoundaryHandler(..)
+  , Sifter
   , defaultSifter
   , SplineEnd(..)
   -- * Internal
@@ -58,15 +59,39 @@ module Numeric.EMD (
 
 import           Control.DeepSeq
 import           Control.Monad.IO.Class
+import           Data.Default.Class
 import           Data.Functor.Identity
 import           Data.List
-import           GHC.Generics              (Generic)
+import           GHC.Generics                (Generic)
 import           GHC.TypeNats
-import           Numeric.EMD.Internal.Sift
+import           Numeric.EMD.Internal
+import           Numeric.EMD.Internal.Spline
+import           Numeric.EMD.Sift
 import           Text.Printf
-import qualified Data.Binary               as Bi
-import qualified Data.Vector.Generic       as VG
-import qualified Data.Vector.Generic.Sized as SVG
+import qualified Data.Binary                 as Bi
+import qualified Data.Vector.Generic         as VG
+import qualified Data.Vector.Generic.Sized   as SVG
+
+-- | Default 'EMDOpts'
+--
+-- Note: If you immediately use this and set 'eoSifter', then @v@ will be
+-- ambiguous.  Explicitly set @v@ with type applications to appease GHC
+--
+-- @
+-- 'defaultEO' @(Data.Vector.Vector)
+--    { eoSifter = scTimes 100
+--    }
+-- @
+defaultEO :: (VG.Vector v a, Fractional a, Ord a) => EMDOpts v n a
+defaultEO = EO { eoSifter          = defaultSifter
+               , eoSplineEnd       = SENatural
+               , eoBoundaryHandler = Just BHSymmetric
+               }
+
+-- | @since 0.1.3.0
+instance (VG.Vector v a, Fractional a, Ord a) => Default (EMDOpts v n a) where
+    def = defaultEO
+
 
 -- | An @'EMD' v n a@ is an Empirical Mode Decomposition of a time series
 -- with @n@ items of type @a@ stored in a vector @v@.

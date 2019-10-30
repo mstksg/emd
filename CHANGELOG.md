@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.2.0.0
+---------------
+
+*October 30, 2019*
+
+<https://github.com/mstksg/emd/releases/tag/v0.2.0.0>
+
+*   Sift condition system totally revamped, allowing for custom sift
+    conditions.
+
 Version 0.1.10.0
 ---------------
 

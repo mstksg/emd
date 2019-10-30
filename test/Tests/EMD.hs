@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes                               #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}
 {-# LANGUAGE TemplateHaskell                          #-}
 {-# LANGUAGE TypeApplications                         #-}
@@ -16,8 +17,10 @@ import           Data.Proxy
 import           GHC.TypeNats
 import           Hedgehog
 import           Numeric.EMD
+import           Numeric.EMD.Sift
 import           Test.Tasty
 import           Tests.Util
+import qualified Data.Vector           as UV
 import qualified Hedgehog.Range        as Range
 
 emdTests :: TestTree
@@ -29,8 +32,8 @@ prop_iemd_default = iemdProp defaultEO
 prop_orthog_default :: Property
 prop_orthog_default = orthogProp defaultEO
 
-edtEO :: EMDOpts Double
-edtEO = defaultEO
+edtEO :: KnownNat n => EMDOpts UV.Vector n Double
+edtEO = (defaultEO @UV.Vector)
     { eoSifter = siftEnergyDiff 0.01 0.01
         `siftOr` siftTimes 100
     }
@@ -41,8 +44,8 @@ prop_iemd_edt = iemdProp edtEO
 prop_orthog_edt :: Property
 prop_orthog_edt = orthogProp edtEO
 
-sCondEO :: EMDOpts _ _ Double
-sCondEO = defaultEO
+sCondEO :: KnownNat n => EMDOpts UV.Vector (n + 1) Double
+sCondEO = (defaultEO @UV.Vector)
     { eoSifter = siftSCond 10
         `siftOr` siftTimes 100
     }
@@ -54,12 +57,12 @@ prop_orthog_sCond :: Property
 prop_orthog_sCond = orthogProp sCondEO
 
 
-iemdProp :: EMDOpts Double -> Property
+iemdProp :: (forall n. KnownNat n => EMDOpts UV.Vector (n + 1) Double) -> Property
 iemdProp eo = property $ withSize (Range.linear 1 8) $ \(_ :: Proxy n) -> do
     xs <- forAll $ generateData @n
     tripping (CE xs) (emd @_ @_ @(2^n-1) eo . getCE) (Identity . CE . iemd)
 
-orthogProp :: EMDOpts Double -> Property
+orthogProp :: (forall n. KnownNat n => EMDOpts UV.Vector (n + 1) Double) -> Property
 orthogProp eo = property $ withSize (Range.linear 8 10) $ \(_ :: Proxy n) -> do
     xs   <- forAll $ generateData @n
     let imfs = emdIMFs (emd @_ @_ @(2^n-1) eo xs)
