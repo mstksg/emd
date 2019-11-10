@@ -43,7 +43,7 @@ jobs:
         # use this to include any dependencies from OS package managers
         include:
         - os: macOS-latest
-          brew: fftw
+          brew: pkg-config fftw
         - os: ubuntu-latest
           apt-get: libfftw3-dev happy
 
