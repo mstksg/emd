@@ -47,7 +47,7 @@ module Numeric.EMD (
   , iemd
   , EMD(..)
   -- ** Configuration
-  , EMDOpts(..), defaultEO
+  , EMDOpts(..), defaultEO, defaultEO'
   , BoundaryHandler(..)
   , Sifter
   , defaultSifter
@@ -75,18 +75,26 @@ import qualified Data.Vector.Generic.Sized   as SVG
 -- | Default 'EMDOpts'
 --
 -- Note: If you immediately use this and set 'eoSifter', then @v@ will be
--- ambiguous.  Explicitly set @v@ with type applications to appease GHC
---
--- @
--- 'defaultEO' @(Data.Vector.Vector)
---    { eoSifter = scTimes 100
---    }
--- @
+-- ambiguous.  Either explicitly set @v@ with something like type
+-- applications, or just use 'defaultEO'.
 defaultEO :: (VG.Vector v a, Fractional a, Ord a) => EMDOpts v n a
 defaultEO = EO { eoSifter          = defaultSifter
                , eoSplineEnd       = SENatural
                , eoBoundaryHandler = Just BHSymmetric
                }
+
+-- | Version of 'defaultEO' allowing you to specify an 'eoSifter'.  This is
+-- usually better than using 'defaultEO' and re-assigning 'eoSifter'
+-- because it is easier on type inference.
+--
+-- @since 0.2.1.0
+defaultEO'
+    :: Sifter v n a
+    -> EMDOpts v n a
+defaultEO' s = EO { eoSifter          = s
+                  , eoSplineEnd       = SENatural
+                  , eoBoundaryHandler = Just BHSymmetric
+                  }
 
 -- | @since 0.1.3.0
 instance (VG.Vector v a, Fractional a, Ord a) => Default (EMDOpts v n a) where

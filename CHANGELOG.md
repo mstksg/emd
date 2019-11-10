@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.2.1.0
+---------------
+
+*November 9, 2019*
+
+<https://github.com/mstksg/emd/releases/tag/v0.2.1.0>
+
+*   Add `defaultEO'`, which makes type inference nicer when using `defaultEO`
+    with a custom sifter.
+
 Version 0.2.0.0
 ---------------
 

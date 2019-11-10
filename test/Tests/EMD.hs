@@ -33,10 +33,8 @@ prop_orthog_default :: Property
 prop_orthog_default = orthogProp defaultEO
 
 edtEO :: KnownNat n => EMDOpts UV.Vector n Double
-edtEO = (defaultEO @UV.Vector)
-    { eoSifter = siftEnergyDiff 0.01 0.01
-        `siftOr` siftTimes 100
-    }
+edtEO = defaultEO' $ siftEnergyDiff 0.01 0.01
+            `siftOr` siftTimes 100
 
 prop_iemd_edt :: Property
 prop_iemd_edt = iemdProp edtEO
@@ -45,10 +43,8 @@ prop_orthog_edt :: Property
 prop_orthog_edt = orthogProp edtEO
 
 sCondEO :: KnownNat n => EMDOpts UV.Vector (n + 1) Double
-sCondEO = (defaultEO @UV.Vector)
-    { eoSifter = siftSCond 10
-        `siftOr` siftTimes 100
-    }
+sCondEO = defaultEO' $ siftSCond 10
+              `siftOr` siftTimes 100
 
 prop_iemd_sCond :: Property
 prop_iemd_sCond = iemdProp sCondEO
