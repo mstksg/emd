@@ -45,7 +45,7 @@ jobs:
         - os: macOS-latest
           brew: fftw
         - os: ubuntu-latest
-          apt-get: libfftw3-dev
+          apt-get: libfftw3-dev happy
 
         exclude:
         - os: macOS-latest
