@@ -43,7 +43,7 @@ library:
   - array
   - binary
   - carray
-  - conduino
+  - conduino >= 0.2.1
   - containers
   - data-default-class
   - deepseq

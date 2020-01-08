@@ -51,7 +51,6 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Conduino
-import           Data.Conduino.Internal
 import           Data.Default.Class
 import           Data.Finite
 import           Data.Sequence                (Seq(..))
