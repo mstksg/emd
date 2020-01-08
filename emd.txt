@@ -7,7 +7,7 @@
 --   Empirical Mode decomposition and Hilbert-Huang Transform in pure
 --   Haskell.
 @package emd
-@version 0.2.0.0
+@version 0.2.1.0
 
 
 -- | Internal splining functionality exported for testing purposes only.
@@ -244,15 +244,15 @@ EO :: Sifter v n a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts v n a
 -- | Default <a>EMDOpts</a>
 --   
 --   Note: If you immediately use this and set <a>eoSifter</a>, then
---   <tt>v</tt> will be ambiguous. Explicitly set <tt>v</tt> with type
---   applications to appease GHC
---   
---   <pre>
---   <a>defaultEO</a> @(Data.Vector.Vector)
---      { eoSifter = scTimes 100
---      }
---   </pre>
+--   <tt>v</tt> will be ambiguous. Either explicitly set <tt>v</tt> with
+--   something like type applications, or just use <a>defaultEO</a>.
 defaultEO :: (Vector v a, Fractional a, Ord a) => EMDOpts v n a
+
+-- | Version of <a>defaultEO</a> allowing you to specify an
+--   <a>eoSifter</a>. This is usually better than using <a>defaultEO</a>
+--   and re-assigning <a>eoSifter</a> because it is easier on type
+--   inference.
+defaultEO' :: Sifter v n a -> EMDOpts v n a
 
 -- | Boundary conditions for splines.
 data BoundaryHandler
@@ -467,14 +467,8 @@ EO :: Sifter v n a -> SplineEnd a -> Maybe BoundaryHandler -> EMDOpts v n a
 -- | Default <a>EMDOpts</a>
 --   
 --   Note: If you immediately use this and set <a>eoSifter</a>, then
---   <tt>v</tt> will be ambiguous. Explicitly set <tt>v</tt> with type
---   applications to appease GHC
---   
---   <pre>
---   <a>defaultEO</a> @(Data.Vector.Vector)
---      { eoSifter = scTimes 100
---      }
---   </pre>
+--   <tt>v</tt> will be ambiguous. Either explicitly set <tt>v</tt> with
+--   something like type applications, or just use <a>defaultEO</a>.
 defaultEO :: (Vector v a, Fractional a, Ord a) => EMDOpts v n a
 
 -- | Boundary conditions for splines.
